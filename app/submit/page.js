@@ -4,223 +4,197 @@ import { supabase } from '../../lib/supabaseClient';
 
 const REGIONS = ['전주시','군산시','익산시','정읍시','남원시','김제시','완주군','진안군','무주군','장수군','임실군','순창군','고창군','부안군'];
 
-export default function Home() {
-  const [tab, setTab] = useState('recommend');
-  const [percentage, setPercentage] = useState('');
-  const [recType, setRecType] = useState('');
-  const [recResult, setRecResult] = useState(null);
-  const [recSettings, setRecSettings] = useState(null);
+export default function SubmitPage() {
+  const [form, setForm] = useState({
+    region: '전주시',
+    school_type: '전기고',
+    school_name: '',
+    department_name: '',
+    year: new Date().getFullYear(),
+    percentage_cut: '',
+    dormitory: '없음',
+    feature: '',
+  });
+  const [schoolNames, setSchoolNames] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  const [listRegion, setListRegion] = useState('');
-  const [listSchool, setListSchool] = useState('');
-  const [listType, setListType] = useState('');
-  const [listData, setListData] = useState([]);
-  const [schools, setSchools] = useState([]);
+  const [msg, setMsg] = useState(null);
 
   useEffect(() => {
-    fetchSchools();
-    fetchRecSettings();
+    fetchSchoolNames();
   }, []);
 
-  useEffect(() => {
-    if (tab === 'list') fetchList();
-  }, [tab, listRegion, listSchool, listType]);
-
-  async function fetchSchools() {
-    const { data } = await supabase.from('schools').select('id, school_name, region').order('school_name');
-    if (data) setSchools(data);
+  async function fetchSchoolNames() {
+    const { data } = await supabase.from('schools').select('school_name');
+    if (data) setSchoolNames([...new Set(data.map(s => s.school_name))]);
   }
 
-  async function fetchRecSettings() {
-    const { data } = await supabase.from('recommendation_settings').select('*').eq('id', 1).single();
-    if (data) setRecSettings(data);
+  function update(key, value) {
+    setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  async function fetchList() {
-    const { data } = await supabase
-      .from('school_cuts')
-      .select('*, departments(department_name, schools(school_name, region, school_type))')
-      .eq('status', 'approved')
-      .order('updated_at', { ascending: false });
-
-    let filtered = data || [];
-    if (listRegion) filtered = filtered.filter(r => r.departments?.schools?.region === listRegion);
-    if (listSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name?.includes(listSchool));
-    if (listType) filtered = filtered.filter(r => r.departments?.schools?.school_type === listType);
-
-    setListData(filtered);
-  }
-
-  async function handleRecommend() {
-    if (!percentage) { alert('성적을 입력해주세요.'); return; }
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setMsg(null);
+    if (!form.school_name || !form.department_name || !form.percentage_cut) {
+      setMsg({ type: 'error', text: '필수 항목을 모두 입력해주세요.' });
+      return;
+    }
     setLoading(true);
-    const p = parseFloat(percentage);
-    const { data, error } = await supabase
-      .from('school_cuts')
-      .select('*, departments(department_name, schools(school_name, region, school_type))')
-      .eq('status', 'approved');
+    try {
+      let { data: existingSchool } = await supabase
+        .from('schools')
+        .select('id')
+        .eq('school_name', form.school_name)
+        .maybeSingle();
+
+      let schoolId;
+      if (existingSchool) {
+        schoolId = existingSchool.id;
+      } else {
+        const { data: newSchool, error: schoolError } = await supabase
+          .from('schools')
+          .insert({ region: form.region, school_type: form.school_type, school_name: form.school_name })
+          .select('id')
+          .single();
+        if (schoolError) throw schoolError;
+        schoolId = newSchool.id;
+      }
+
+      let { data: existingDept } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('school_id', schoolId)
+        .eq('department_name', form.department_name)
+        .maybeSingle();
+
+      let deptId;
+      if (existingDept) {
+        deptId = existingDept.id;
+      } else {
+        const { data: newDept, error: deptError } = await supabase
+          .from('departments')
+          .insert({ school_id: schoolId, department_name: form.department_name })
+          .select('id')
+          .single();
+        if (deptError) throw deptError;
+        deptId = newDept.id;
+      }
+
+      const { data: settings } = await supabase
+        .from('site_settings')
+        .select('approval_mode')
+        .eq('id', 1)
+        .single();
+      const approvalMode = settings?.approval_mode ?? false;
+
+      let { data: existingCut } = await supabase
+        .from('school_cuts')
+        .select('*')
+        .eq('department_id', deptId)
+        .eq('year', form.year)
+        .maybeSingle();
+
+      const newValue = parseFloat(form.percentage_cut);
+
+      if (existingCut) {
+        const { error: updateError } = await supabase
+          .from('school_cuts')
+          .update({
+            percentage_cut: newValue,
+            dormitory: form.dormitory,
+            feature: form.feature,
+            status: approvalMode ? 'pending' : 'approved',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingCut.id);
+        if (updateError) throw updateError;
+
+        await supabase.from('edit_history').insert({
+          cut_id: existingCut.id,
+          old_value: existingCut.percentage_cut,
+          new_value: newValue,
+        });
+      } else {
+        const { error: insertError } = await supabase
+          .from('school_cuts')
+          .insert({
+            department_id: deptId,
+            year: form.year,
+            percentage_cut: newValue,
+            dormitory: form.dormitory,
+            feature: form.feature,
+            status: approvalMode ? 'pending' : 'approved',
+          });
+        if (insertError) throw insertError;
+      }
+
+      setMsg({ type: 'success', text: approvalMode ? '제보가 승인 대기 중입니다. 감사합니다!' : '제보가 반영되었습니다. 감사합니다!' });
+      setForm(prev => ({ ...prev, department_name: '', percentage_cut: '', feature: '' }));
+      fetchSchoolNames();
+    } catch (err) {
+      setMsg({ type: 'error', text: '오류가 발생했습니다: ' + err.message });
+    }
     setLoading(false);
-
-    if (error) { alert('오류: ' + error.message); return; }
-
-    let filtered = data || [];
-    if (recType) filtered = filtered.filter(r => r.departments?.schools?.school_type === recType);
-
-    const stable = recSettings?.stable_threshold ?? 10;
-    const moderate = recSettings?.moderate_threshold ?? -3;
-    const challenge = recSettings?.challenge_threshold ?? -10;
-
-    const groups = { stable: [], moderate: [], challenge: [] };
-    filtered.forEach(r => {
-      const diff = r.percentage_cut - p;
-      const item = { ...r, diff };
-      if (diff >= stable) groups.stable.push(item);
-      else if (diff >= moderate) groups.moderate.push(item);
-      else if (diff >= challenge) groups.challenge.push(item);
-    });
-
-    groups.stable.sort((a, b) => a.diff - b.diff);
-    groups.moderate.sort((a, b) => a.diff - b.diff);
-    groups.challenge.sort((a, b) => a.diff - b.diff);
-
-    setRecResult(groups);
   }
 
   return (
-    <div>
-      <div className="tabs">
-        <button className={tab === 'recommend' ? 'active' : ''} onClick={() => setTab('recommend')}>내 성적으로 추천받기</button>
-        <button className={tab === 'list' ? 'active' : ''} onClick={() => setTab('list')}>전체 목록</button>
-      </div>
-
-      {tab === 'recommend' && (
-        <div>
-          <div className="card">
-            <h2>내 성적으로 학교 추천받기</h2>
-            <div className="form-row">
-              <div>
-                <label>내 백분율 성적 (%)</label>
-                <input type="number" step="0.1" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} placeholder="예: 55" />
-              </div>
-              <div>
-                <label>구분</label>
-                <select value={recType} onChange={e => setRecType(e.target.value)}>
-                  <option value="">전체</option>
-                  <option value="전기고">전기고</option>
-                  <option value="후기고">후기고</option>
-                </select>
-              </div>
-            </div>
-            <button onClick={handleRecommend} disabled={loading}>{loading ? '조회중...' : '추천 결과 보기'}</button>
+    <div className="card">
+      <h2>정보 제보하기</h2>
+      {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
+      <form onSubmit={handleSubmit}>
+        <div className="form-row">
+          <div>
+            <label>지역</label>
+            <select value={form.region} onChange={e => update('region', e.target.value)}>
+              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
           </div>
-
-          {recResult && (
-            <div>
-              <div className="result-group">
-                <h3><span className="badge stable">안정권</span></h3>
-                {recResult.stable.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
-                {recResult.stable.map(r => (
-                  <div className="result-item" key={r.id}>
-                    <div>
-                      {r.departments?.schools?.school_name} - {r.departments?.department_name}
-                      <div style={{ fontSize: 12, color: '#888' }}>합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p) · 🏠 기숙사 {r.dormitory || '정보없음'}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="result-group">
-                <h3><span className="badge moderate">적정권</span></h3>
-                {recResult.moderate.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
-                {recResult.moderate.map(r => (
-                  <div className="result-item" key={r.id}>
-                    <div>
-                      {r.departments?.schools?.school_name} - {r.departments?.department_name}
-                      <div style={{ fontSize: 12, color: '#888' }}>합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p) · 🏠 기숙사 {r.dormitory || '정보없음'}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="result-group">
-                <h3><span className="badge challenge">도전권</span></h3>
-                {recResult.challenge.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
-                {recResult.challenge.map(r => (
-                  <div className="result-item" key={r.id}>
-                    <div>
-                      {r.departments?.schools?.school_name} - {r.departments?.department_name}
-                      <div style={{ fontSize: 12, color: '#888' }}>합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p) · 🏠 기숙사 {r.dormitory || '정보없음'}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === 'list' && (
-        <div className="card">
-          <h2>전체 목록</h2>
-          <div className="form-row">
-            <div>
-              <label>지역</label>
-              <select value={listRegion} onChange={e => setListRegion(e.target.value)}>
-                <option value="">전체</option>
-                {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>학교 검색</label>
-              <input
-                list="school-search-list"
-                value={listSchool}
-                onChange={e => setListSchool(e.target.value)}
-                placeholder="학교명을 입력하세요 (예: 전주)"
-              />
-              <datalist id="school-search-list">
-                {schools.map(s => <option key={s.id} value={s.school_name} />)}
-              </datalist>
-            </div>
-            <div>
-              <label>전기/후기</label>
-              <select value={listType} onChange={e => setListType(e.target.value)}>
-                <option value="">전체</option>
-                <option value="전기고">전기고</option>
-                <option value="후기고">후기고</option>
-              </select>
-            </div>
+          <div>
+            <label>전기고/후기고</label>
+            <select value={form.school_type} onChange={e => update('school_type', e.target.value)}>
+              <option value="전기고">전기고</option>
+              <option value="후기고">후기고</option>
+            </select>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>지역</th><th>학교</th><th>학과</th><th>연도</th><th>합격선</th><th>기숙사</th><th>특징</th><th>최종수정</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listData.map(r => {
-                const s = r.departments?.schools;
-                return (
-                  <tr key={r.id}>
-                    <td>{s?.region}</td>
-                    <td>{s?.school_name}</td>
-                    <td>{r.departments?.department_name}</td>
-                    <td>{r.year}</td>
-                    <td>{r.percentage_cut}%</td>
-                    <td>{r.dormitory || '-'}</td>
-                    <td>{r.feature || '-'}</td>
-                    <td>{new Date(r.updated_at).toLocaleString('ko-KR')}</td>
-                  </tr>
-                );
-              })}
-              {listData.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
-              )}
-            </tbody>
-          </table>
         </div>
-      )}
+        <div className="form-row">
+          <div>
+            <label>고등학교명</label>
+            <input list="school-list" value={form.school_name} onChange={e => update('school_name', e.target.value)} placeholder="학교명 입력 (없으면 새로 추가돼요)" />
+            <datalist id="school-list">
+              {schoolNames.map(name => <option key={name} value={name} />)}
+            </datalist>
+          </div>
+          <div>
+            <label>학과</label>
+            <input value={form.department_name} onChange={e => update('department_name', e.target.value)} placeholder="예: 인문, 자연, 디자인과 등" />
+          </div>
+        </div>
+        <div className="form-row">
+          <div>
+            <label>기준년도</label>
+            <input type="number" value={form.year} onChange={e => update('year', e.target.value)} />
+          </div>
+          <div>
+            <label>합격선 (%) - 숫자가 낮을수록 우수</label>
+            <input type="number" step="0.1" min="0" max="100" value={form.percentage_cut} onChange={e => update('percentage_cut', e.target.value)} placeholder="예: 61" />
+          </div>
+          <div>
+            <label>기숙사</label>
+            <select value={form.dormitory} onChange={e => update('dormitory', e.target.value)}>
+              <option value="있음">있음</option>
+              <option value="없음">없음</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-row">
+          <div>
+            <label>기타 특징</label>
+            <input value={form.feature} onChange={e => update('feature', e.target.value)} placeholder="선택사항" />
+          </div>
+        </div>
+        <button type="submit" disabled={loading}>{loading ? '제출중...' : '제보 제출하기'}</button>
+      </form>
     </div>
   );
 }
