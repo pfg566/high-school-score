@@ -46,7 +46,7 @@ export default function Home() {
 
     let filtered = data || [];
     if (listRegion) filtered = filtered.filter(r => r.departments?.schools?.region === listRegion);
-    if (listSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name === listSchool);
+    if (listSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name?.includes(listSchool));
     if (listType) filtered = filtered.filter(r => r.departments?.schools?.school_type === listType);
 
     setListData(filtered);
@@ -172,11 +172,16 @@ export default function Home() {
               </select>
             </div>
             <div>
-              <label>학교</label>
-              <select value={listSchool} onChange={e => setListSchool(e.target.value)}>
-                <option value="">전체</option>
-                {schools.map(s => <option key={s.id} value={s.school_name}>{s.school_name}</option>)}
-              </select>
+              <label>학교 검색</label>
+              <input
+                list="school-search-list"
+                value={listSchool}
+                onChange={e => setListSchool(e.target.value)}
+                placeholder="학교명을 입력하세요 (예: 전주)"
+              />
+              <datalist id="school-search-list">
+                {schools.map(s => <option key={s.id} value={s.school_name} />)}
+              </datalist>
             </div>
             <div>
               <label>전기/후기</label>
