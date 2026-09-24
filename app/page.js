@@ -1,169 +1,168 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-const REGIONS = ['서울','부산','대구','인천','광주','대전','울산','세종','경기','강원','충북','충남','전북','전남','경북','경남','제주'];
+const REGIONS = ['서울','경기','인천','부산','대구','광주','대전','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
 
 export default function Home() {
   const [tab, setTab] = useState('recommend');
 
-  // 추천 관련 state
-  const [score, setScore] = useState('');
-  const [region, setRegion] = useState('');
-  const [schoolFilter, setSchoolFilter] = useState('');
-  const [schools, setSchools] = useState([]);
-  const [settings, setSettings] = useState({ stable_threshold: 10, moderate_threshold: -3, challenge_threshold: -10 });
-  const [recommendResult, setRecommendResult] = useState(null);
+  const [percentage, setPercentage] = useState('');
+  const [recRegion, setRecRegion] = useState('');
+  const [recSchool, setRecSchool] = useState('');
+  const [recResult, setRecResult] = useState(null);
+  const [recSettings, setRecSettings] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 전체 목록 관련 state
-  const [listData, setListData] = useState([]);
   const [listRegion, setListRegion] = useState('');
   const [listSchool, setListSchool] = useState('');
   const [listType, setListType] = useState('');
+  const [listData, setListData] = useState([]);
+
+  const [schools, setSchools] = useState([]);
 
   useEffect(() => {
-    loadSchools();
-    loadSettings();
+    fetchSchools();
+    fetchRecSettings();
   }, []);
 
   useEffect(() => {
-    if (tab === 'list') loadList();
+    if (tab === 'list') fetchList();
   }, [tab, listRegion, listSchool, listType]);
 
-  async function loadSchools() {
-    const { data } = await supabase.from('schools').select('*').order('school_name');
-    setSchools(data || []);
+  async function fetchSchools() {
+    const { data } = await supabase.from('schools').select('id, school_name, region').order('school_name');
+    if (data) setSchools(data);
   }
 
-  async function loadSettings() {
+  async function fetchRecSettings() {
     const { data } = await supabase.from('recommendation_settings').select('*').eq('id', 1).single();
-    if (data) setSettings(data);
+    if (data) setRecSettings(data);
   }
 
-  async function loadList() {
-    let query = supabase
+  async function fetchList() {
+    const { data } = await supabase
       .from('school_cuts')
       .select('*, departments(department_name, schools(school_name, region, school_type))')
       .eq('status', 'approved')
       .order('updated_at', { ascending: false });
 
-    const { data } = await query;
-    let rows = data || [];
-
-    rows = rows.filter(r => {
-      const s = r.departments?.schools;
-      if (!s) return false;
-      if (listRegion && s.region !== listRegion) return false;
-      if (listSchool && s.school_name !== listSchool) return false;
-      if (listType && s.school_type !== listType) return false;
-      return true;
-    });
-
-    setListData(rows);
+    let filtered = data || [];
+    if (listRegion) filtered = filtered.filter(r => r.departments?.schools?.region === listRegion);
+    if (listSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name === listSchool);
+    if (listType) filtered = filtered.filter(r => r.departments?.schools?.school_type === listType);
+    setListData(filtered);
   }
 
   async function handleRecommend() {
-    if (!score) { alert('내 백분율 성적을 입력해주세요.'); return; }
+    if (!percentage) { alert('성적을 입력해주세요.'); return; }
     setLoading(true);
+    const p = parseFloat(percentage);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('school_cuts')
       .select('*, departments(department_name, schools(school_name, region, school_type))')
       .eq('status', 'approved');
 
-    let rows = data || [];
-    const p = parseFloat(score);
-
-    rows = rows.filter(r => {
-      const s = r.departments?.schools;
-      if (!s) return false;
-      if (region && s.region !== region) return false;
-      if (schoolFilter && s.school_name !== schoolFilter) return false;
-      return true;
-    });
-
-    const stable = [], moderate = [], challenge = [];
-    rows.forEach(r => {
-      const diff = r.percentage_cut - p;
-      if (diff >= settings.stable_threshold) stable.push({ ...r, diff });
-      else if (diff >= settings.moderate_threshold) moderate.push({ ...r, diff });
-      else if (diff >= settings.challenge_threshold) challenge.push({ ...r, diff });
-    });
-
-    stable.sort((a,b) => a.diff - b.diff);
-    moderate.sort((a,b) => a.diff - b.diff);
-    challenge.sort((a,b) => a.diff - b.diff);
-
-    setRecommendResult({ stable, moderate, challenge });
     setLoading(false);
-  }
+    if (error) { alert('오류: ' + error.message); return; }
 
-  function renderResultItem(r) {
-    const s = r.departments?.schools;
-    return (
-      <div className="result-item" key={r.id}>
-        <div>
-          <strong>{s?.school_name}</strong> - {r.departments?.department_name}
-          <div style={{fontSize:12, color:'#666'}}>
-            합격선 {r.percentage_cut}% · 여유 {r.diff > 0 ? '+' : ''}{r.diff.toFixed(1)}p
-          </div>
-        </div>
-        <div style={{fontSize:13}}>
-          🏠 {r.dormitory || '정보없음'}
-        </div>
-      </div>
-    );
+    let filtered = data || [];
+    if (recRegion) filtered = filtered.filter(r => r.departments?.schools?.region === recRegion);
+    if (recSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name === recSchool);
+
+    const stable = recSettings?.stable_threshold ?? 10;
+    const moderate = recSettings?.moderate_threshold ?? -3;
+    const challenge = recSettings?.challenge_threshold ?? -10;
+
+    const groups = { stable: [], moderate: [], challenge: [] };
+
+    filtered.forEach(r => {
+      const diff = r.percentage_cut - p;
+      const item = { ...r, diff };
+      if (diff >= stable) groups.stable.push(item);
+      else if (diff >= moderate) groups.moderate.push(item);
+      else if (diff >= challenge) groups.challenge.push(item);
+    });
+
+    groups.stable.sort((a, b) => a.diff - b.diff);
+    groups.moderate.sort((a, b) => a.diff - b.diff);
+    groups.challenge.sort((a, b) => a.diff - b.diff);
+
+    setRecResult(groups);
   }
 
   return (
     <div>
       <div className="tabs">
-        <button className={tab==='recommend'?'active':''} onClick={()=>setTab('recommend')}>내 성적으로 학교 찾기</button>
-        <button className={tab==='list'?'active':''} onClick={()=>setTab('list')}>전체 목록 보기</button>
+        <button className={tab === 'recommend' ? 'active' : ''} onClick={() => setTab('recommend')}>내 성적으로 추천받기</button>
+        <button className={tab === 'list' ? 'active' : ''} onClick={() => setTab('list')}>전체 목록</button>
       </div>
 
       {tab === 'recommend' && (
-        <div className="card">
-          <h2>내 성적으로 학교 추천받기</h2>
-          <div className="form-row">
-            <div>
-              <label>내 백분율 성적 (%)</label>
-              <input type="number" step="0.1" value={score} onChange={e=>setScore(e.target.value)} placeholder="예: 55" />
+        <div>
+          <div className="card">
+            <h2>내 성적으로 학교 추천받기</h2>
+            <div className="form-row">
+              <div>
+                <label>내 백분율 성적 (%)</label>
+                <input type="number" step="0.1" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} placeholder="예: 55" />
+              </div>
+              <div>
+                <label>지역</label>
+                <select value={recRegion} onChange={e => setRecRegion(e.target.value)}>
+                  <option value="">전체</option>
+                  {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>학교</label>
+                <select value={recSchool} onChange={e => setRecSchool(e.target.value)}>
+                  <option value="">전체</option>
+                  {schools.map(s => <option key={s.id} value={s.school_name}>{s.school_name}</option>)}
+                </select>
+              </div>
             </div>
-            <div>
-              <label>지역</label>
-              <select value={region} onChange={e=>setRegion(e.target.value)}>
-                <option value="">전체</option>
-                {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>학교</label>
-              <select value={schoolFilter} onChange={e=>setSchoolFilter(e.target.value)}>
-                <option value="">전체</option>
-                {schools.map(s => <option key={s.id} value={s.school_name}>{s.school_name}</option>)}
-              </select>
-            </div>
+            <button onClick={handleRecommend} disabled={loading}>{loading ? '조회중...' : '추천 결과 보기'}</button>
           </div>
-          <button onClick={handleRecommend} disabled={loading}>{loading ? '검색중...' : '추천 결과 보기'}</button>
 
-          {recommendResult && (
-            <div style={{marginTop:24}}>
+          {recResult && (
+            <div>
               <div className="result-group">
                 <h3><span className="badge stable">안정권</span></h3>
-                {recommendResult.stable.length === 0 && <p style={{color:'#999'}}>해당하는 학교가 없어요.</p>}
-                {recommendResult.stable.map(renderResultItem)}
+                {recResult.stable.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
+                {recResult.stable.map(r => (
+                  <div className="result-item" key={r.id}>
+                    <div>
+                      {r.departments?.schools?.school_name} - {r.departments?.department_name}
+                      <div style={{ fontSize: 12, color: '#888' }}>합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p) · 🏠 기숙사 {r.dormitory || '정보없음'}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="result-group">
                 <h3><span className="badge moderate">적정권</span></h3>
-                {recommendResult.moderate.length === 0 && <p style={{color:'#999'}}>해당하는 학교가 없어요.</p>}
-                {recommendResult.moderate.map(renderResultItem)}
+                {recResult.moderate.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
+                {recResult.moderate.map(r => (
+                  <div className="result-item" key={r.id}>
+                    <div>
+                      {r.departments?.schools?.school_name} - {r.departments?.department_name}
+                      <div style={{ fontSize: 12, color: '#888' }}>합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p) · 🏠 기숙사 {r.dormitory || '정보없음'}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="result-group">
-                <h3><span className="badge challenge">소신/도전권</span></h3>
-                {recommendResult.challenge.length === 0 && <p style={{color:'#999'}}>해당하는 학교가 없어요.</p>}
-                {recommendResult.challenge.map(renderResultItem)}
+                <h3><span className="badge challenge">도전권</span></h3>
+                {recResult.challenge.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
+                {recResult.challenge.map(r => (
+                  <div className="result-item" key={r.id}>
+                    <div>
+                      {r.departments?.schools?.school_name} - {r.departments?.department_name}
+                      <div style={{ fontSize: 12, color: '#888' }}>합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p) · 🏠 기숙사 {r.dormitory || '정보없음'}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -176,28 +175,27 @@ export default function Home() {
           <div className="form-row">
             <div>
               <label>지역</label>
-              <select value={listRegion} onChange={e=>setListRegion(e.target.value)}>
+              <select value={listRegion} onChange={e => setListRegion(e.target.value)}>
                 <option value="">전체</option>
                 {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div>
               <label>학교</label>
-              <select value={listSchool} onChange={e=>setListSchool(e.target.value)}>
+              <select value={listSchool} onChange={e => setListSchool(e.target.value)}>
                 <option value="">전체</option>
                 {schools.map(s => <option key={s.id} value={s.school_name}>{s.school_name}</option>)}
               </select>
             </div>
             <div>
               <label>전기/후기</label>
-              <select value={listType} onChange={e=>setListType(e.target.value)}>
+              <select value={listType} onChange={e => setListType(e.target.value)}>
                 <option value="">전체</option>
                 <option value="전기고">전기고</option>
                 <option value="후기고">후기고</option>
               </select>
             </div>
           </div>
-
           <table>
             <thead>
               <tr>
@@ -221,7 +219,7 @@ export default function Home() {
                 );
               })}
               {listData.length === 0 && (
-                <tr><td colSpan={8} style={{textAlign:'center', color:'#999'}}>데이터가 없어요.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
               )}
             </tbody>
           </table>
