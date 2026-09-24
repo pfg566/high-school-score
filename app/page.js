@@ -163,35 +163,35 @@ export default function Home() {
       {tab === 'list' && (
         <div className="card">
           <h2>전체 목록</h2>
-          <div className="form-row">
-            <div>
-              <label>지역</label>
-              <select value={listRegion} onChange={e => setListRegion(e.target.value)}>
-                <option value="">전체</option>
-                {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>학교 검색</label>
-              <input
-                list="school-search-list"
-                value={listSchool}
-                onChange={e => setListSchool(e.target.value)}
-                placeholder="학교명을 입력하세요 (예: 전주)"
-              />
-              <datalist id="school-search-list">
-                {schools.map(s => <option key={s.id} value={s.school_name} />)}
-              </datalist>
-            </div>
-            <div>
-              <label>전기/후기</label>
-              <select value={listType} onChange={e => setListType(e.target.value)}>
-                <option value="">전체</option>
-                <option value="전기고">전기고</option>
-                <option value="후기고">후기고</option>
-              </select>
-            </div>
-          </div>
+<div className="form-row">
+  <div>
+    <label><strong>학교 검색</strong></label>
+    <input
+      list="school-search-list"
+      value={listSchool}
+      onChange={e => setListSchool(e.target.value)}
+      placeholder="학교명을 입력하세요 (예: 전주)"
+    />
+    <datalist id="school-search-list">
+      {schools.map(s => <option key={s.id} value={s.school_name} />)}
+    </datalist>
+  </div>
+  <div>
+    <label>지역</label>
+    <select value={listRegion} onChange={e => setListRegion(e.target.value)}>
+      <option value="">전체</option>
+      {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+    </select>
+  </div>
+  <div>
+    <label>전기/후기</label>
+    <select value={listType} onChange={e => setListType(e.target.value)}>
+      <option value="">전체</option>
+      <option value="전기고">전기고</option>
+      <option value="후기고">후기고</option>
+    </select>
+  </div>
+</div>
           <table>
             <thead>
               <tr>
