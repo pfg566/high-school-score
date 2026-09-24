@@ -6,10 +6,8 @@ const REGIONS = ['전주시','군산시','익산시','정읍시','남원시','�
 
 export default function Home() {
   const [tab, setTab] = useState('recommend');
-
   const [percentage, setPercentage] = useState('');
-  const [recRegion, setRecRegion] = useState('');
-  const [recSchool, setRecSchool] = useState('');
+  const [recType, setRecType] = useState('');
   const [recResult, setRecResult] = useState(null);
   const [recSettings, setRecSettings] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -18,7 +16,6 @@ export default function Home() {
   const [listSchool, setListSchool] = useState('');
   const [listType, setListType] = useState('');
   const [listData, setListData] = useState([]);
-
   const [schools, setSchools] = useState([]);
 
   useEffect(() => {
@@ -51,6 +48,7 @@ export default function Home() {
     if (listRegion) filtered = filtered.filter(r => r.departments?.schools?.region === listRegion);
     if (listSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name === listSchool);
     if (listType) filtered = filtered.filter(r => r.departments?.schools?.school_type === listType);
+
     setListData(filtered);
   }
 
@@ -58,25 +56,22 @@ export default function Home() {
     if (!percentage) { alert('성적을 입력해주세요.'); return; }
     setLoading(true);
     const p = parseFloat(percentage);
-
     const { data, error } = await supabase
       .from('school_cuts')
       .select('*, departments(department_name, schools(school_name, region, school_type))')
       .eq('status', 'approved');
-
     setLoading(false);
+
     if (error) { alert('오류: ' + error.message); return; }
 
     let filtered = data || [];
-    if (recRegion) filtered = filtered.filter(r => r.departments?.schools?.region === recRegion);
-    if (recSchool) filtered = filtered.filter(r => r.departments?.schools?.school_name === recSchool);
+    if (recType) filtered = filtered.filter(r => r.departments?.schools?.school_type === recType);
 
     const stable = recSettings?.stable_threshold ?? 10;
     const moderate = recSettings?.moderate_threshold ?? -3;
     const challenge = recSettings?.challenge_threshold ?? -10;
 
     const groups = { stable: [], moderate: [], challenge: [] };
-
     filtered.forEach(r => {
       const diff = r.percentage_cut - p;
       const item = { ...r, diff };
@@ -109,17 +104,11 @@ export default function Home() {
                 <input type="number" step="0.1" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} placeholder="예: 55" />
               </div>
               <div>
-                <label>지역</label>
-                <select value={recRegion} onChange={e => setRecRegion(e.target.value)}>
+                <label>구분</label>
+                <select value={recType} onChange={e => setRecType(e.target.value)}>
                   <option value="">전체</option>
-                  {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>학교</label>
-                <select value={recSchool} onChange={e => setRecSchool(e.target.value)}>
-                  <option value="">전체</option>
-                  {schools.map(s => <option key={s.id} value={s.school_name}>{s.school_name}</option>)}
+                  <option value="전기고">전기고</option>
+                  <option value="후기고">후기고</option>
                 </select>
               </div>
             </div>
@@ -140,6 +129,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+
               <div className="result-group">
                 <h3><span className="badge moderate">적정권</span></h3>
                 {recResult.moderate.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
@@ -152,6 +142,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+
               <div className="result-group">
                 <h3><span className="badge challenge">도전권</span></h3>
                 {recResult.challenge.length === 0 && <p style={{ color: '#999' }}>해당하는 학교가 없어요.</p>}
