@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -6,11 +7,11 @@ export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-
   const [settings, setSettings] = useState(null);
   const [recSettings, setRecSettings] = useState(null);
   const [pending, setPending] = useState([]);
   const [history, setHistory] = useState([]);
+  const [allCuts, setAllCuts] = useState([]);
   const [msg, setMsg] = useState(null);
 
   useEffect(() => {
@@ -46,6 +47,13 @@ export default function AdminPage() {
       .order('changed_at', { ascending: false })
       .limit(50);
     setHistory(h || []);
+
+    const { data: all } = await supabase
+      .from('school_cuts')
+      .select('*, departments(department_name, schools(school_name, region))')
+      .eq('status', 'approved')
+      .order('updated_at', { ascending: false });
+    setAllCuts(all || []);
   }
 
   async function toggleApproval() {
@@ -56,6 +64,17 @@ export default function AdminPage() {
     } else {
       setSettings({ ...settings, approval_mode: newValue });
       setMsg({ type: 'success', text: '승인 모드가 변경되었습니다.' });
+    }
+  }
+
+  async function toggleAllowEdit() {
+    const newValue = !(settings.allow_public_edit !== false);
+    const { error } = await supabase.from('site_settings').update({ allow_public_edit: newValue }).eq('id', 1);
+    if (error) {
+      setMsg({ type: 'error', text: '오류: ' + error.message });
+    } else {
+      setSettings({ ...settings, allow_public_edit: newValue });
+      setMsg({ type: 'success', text: '공개 수정 권한 설정이 변경되었습니다.' });
     }
   }
 
@@ -92,6 +111,17 @@ export default function AdminPage() {
     }
   }
 
+  async function deleteCut(id) {
+    if (!confirm('정말 이 항목을 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('school_cuts').delete().eq('id', id);
+    if (!error) {
+      setMsg({ type: 'success', text: '삭제되었습니다.' });
+      fetchAll();
+    } else {
+      setMsg({ type: 'error', text: '삭제 중 오류: ' + error.message });
+    }
+  }
+
   async function revertHistory(h) {
     const { error } = await supabase
       .from('school_cuts')
@@ -122,10 +152,22 @@ export default function AdminPage() {
   return (
     <div>
       {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
+
       <div className="card">
         <h2>승인 모드</h2>
         <p>현재 상태: <strong>{settings?.approval_mode ? '승인 후 게시' : '즉시 게시'}</strong></p>
         <button onClick={toggleApproval}>{settings?.approval_mode ? '즉시 게시로 전환' : '승인 후 게시로 전환'}</button>
+      </div>
+
+      <div className="card">
+        <h2>공개 수정 권한</h2>
+        <p>현재 상태: <strong>{settings?.allow_public_edit !== false ? '누구나 수정 가능' : '수정 비활성화 (관리자만 가능)'}</strong></p>
+        <button onClick={toggleAllowEdit}>
+          {settings?.allow_public_edit !== false ? '공개 수정 비활성화하기' : '공개 수정 활성화하기'}
+        </button>
+        <p style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+          * 삭제 권한은 항상 관리자만 가능합니다.
+        </p>
       </div>
 
       {recSettings && (
@@ -158,7 +200,7 @@ export default function AdminPage() {
         {pending.map(p => (
           <div className="result-item" key={p.id}>
             <div>
-              {p.departments?.schools?.school_name} - {p.departments?.department_name} : {p.percentage_cut}%
+              {p.departments?.schools?.school_name} - {p.departments?.department_name} : {p.is_below_cutoff ? '미달' : (p.percentage_cut + '%')}
             </div>
             <div>
               <button onClick={() => approveCut(p.id)}>승인</button>{' '}
@@ -169,13 +211,40 @@ export default function AdminPage() {
       </div>
 
       <div className="card">
+        <h2>전체 데이터 관리 ({allCuts.length}건)</h2>
+        <p style={{ fontSize: 12, color: '#888' }}>여기서 삭제하면 즉시 목록에서 사라집니다.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>지역</th><th>학교</th><th>학과</th><th>연도</th><th>합격선</th><th>관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allCuts.map(c => (
+              <tr key={c.id}>
+                <td>{c.departments?.schools?.region}</td>
+                <td>{c.departments?.schools?.school_name}</td>
+                <td>{c.departments?.department_name || '학과정보 없음'}</td>
+                <td>{c.year}</td>
+                <td>{c.is_below_cutoff ? '미달' : (c.percentage_cut != null ? c.percentage_cut + '%' : '-')}</td>
+                <td><button className="danger" onClick={() => deleteCut(c.id)}>삭제</button></td>
+              </tr>
+            ))}
+            {allCuts.length === 0 && (
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
         <h2>수정 기록</h2>
         {history.length === 0 && <p style={{ color: '#999' }}>기록이 없어요.</p>}
         {history.map(h => (
           <div className="result-item" key={h.id}>
             <div>
-              {h.school_cuts?.departments?.schools?.school_name} - {h.school_cuts?.departments?.department_name} :
-              {' '}{h.old_value}% → {h.new_value}%
+              {h.school_cuts?.departments?.schools?.school_name} - {h.school_cuts?.departments?.department_name} :{' '}
+              {h.old_value}% → {h.new_value}%
               <div style={{ fontSize: 12, color: '#888' }}>{new Date(h.changed_at).toLocaleString('ko-KR')}</div>
             </div>
             <button className="secondary" onClick={() => revertHistory(h)}>되돌리기</button>
