@@ -12,6 +12,7 @@ export default function SubmitPage() {
     department_name: '',
     year: new Date().getFullYear(),
     percentage_cut: '',
+    is_below_cutoff: false,
     dormitory: '없음',
     feature: '',
   });
@@ -32,13 +33,27 @@ export default function SubmitPage() {
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
+  function handleBelowCutoffChange(checked) {
+    setForm(prev => ({
+      ...prev,
+      is_below_cutoff: checked,
+      percentage_cut: checked ? '' : prev.percentage_cut,
+    }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setMsg(null);
-    if (!form.school_name || !form.department_name || !form.percentage_cut) {
-      setMsg({ type: 'error', text: '필수 항목을 모두 입력해주세요.' });
+
+    if (!form.school_name) {
+      setMsg({ type: 'error', text: '고등학교명을 입력해주세요.' });
       return;
     }
+    if (!form.is_below_cutoff && !form.percentage_cut) {
+      setMsg({ type: 'error', text: '합격선을 입력하거나 "미달"에 체크해주세요.' });
+      return;
+    }
+
     setLoading(true);
     try {
       let { data: existingSchool } = await supabase
@@ -60,11 +75,13 @@ export default function SubmitPage() {
         schoolId = newSchool.id;
       }
 
+      const departmentName = form.department_name.trim() || '학과정보 없음';
+
       let { data: existingDept } = await supabase
         .from('departments')
         .select('id')
         .eq('school_id', schoolId)
-        .eq('department_name', form.department_name)
+        .eq('department_name', departmentName)
         .maybeSingle();
 
       let deptId;
@@ -73,7 +90,7 @@ export default function SubmitPage() {
       } else {
         const { data: newDept, error: deptError } = await supabase
           .from('departments')
-          .insert({ school_id: schoolId, department_name: form.department_name })
+          .insert({ school_id: schoolId, department_name: departmentName })
           .select('id')
           .single();
         if (deptError) throw deptError;
@@ -94,13 +111,14 @@ export default function SubmitPage() {
         .eq('year', form.year)
         .maybeSingle();
 
-      const newValue = parseFloat(form.percentage_cut);
+      const newValue = form.is_below_cutoff ? null : parseFloat(form.percentage_cut);
 
       if (existingCut) {
         const { error: updateError } = await supabase
           .from('school_cuts')
           .update({
             percentage_cut: newValue,
+            is_below_cutoff: form.is_below_cutoff,
             dormitory: form.dormitory,
             feature: form.feature,
             status: approvalMode ? 'pending' : 'approved',
@@ -121,6 +139,7 @@ export default function SubmitPage() {
             department_id: deptId,
             year: form.year,
             percentage_cut: newValue,
+            is_below_cutoff: form.is_below_cutoff,
             dormitory: form.dormitory,
             feature: form.feature,
             status: approvalMode ? 'pending' : 'approved',
@@ -129,7 +148,7 @@ export default function SubmitPage() {
       }
 
       setMsg({ type: 'success', text: approvalMode ? '제보가 승인 대기 중입니다. 감사합니다!' : '제보가 반영되었습니다. 감사합니다!' });
-      setForm(prev => ({ ...prev, department_name: '', percentage_cut: '', feature: '' }));
+      setForm(prev => ({ ...prev, department_name: '', percentage_cut: '', is_below_cutoff: false, feature: '' }));
       fetchSchoolNames();
     } catch (err) {
       setMsg({ type: 'error', text: '오류가 발생했습니다: ' + err.message });
@@ -166,8 +185,8 @@ export default function SubmitPage() {
             </datalist>
           </div>
           <div>
-            <label>학과</label>
-            <input value={form.department_name} onChange={e => update('department_name', e.target.value)} placeholder="예: 인문, 자연, 디자인과 등" />
+            <label>학과 (선택사항)</label>
+            <input value={form.department_name} onChange={e => update('department_name', e.target.value)} placeholder="비워두면 '학과정보 없음'으로 표시돼요" />
           </div>
         </div>
         <div className="form-row">
@@ -176,8 +195,27 @@ export default function SubmitPage() {
             <input type="number" value={form.year} onChange={e => update('year', e.target.value)} />
           </div>
           <div>
-            <label>합격선 (%) - 숫자가 낮을수록 우수</label>
-            <input type="number" step="0.1" min="0" max="100" value={form.percentage_cut} onChange={e => update('percentage_cut', e.target.value)} placeholder="예: 61" />
+            <label>합격선 (%)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={form.percentage_cut}
+              onChange={e => update('percentage_cut', e.target.value)}
+              placeholder="예: 61"
+              disabled={form.is_below_cutoff}
+            />
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                id="below-cutoff"
+                checked={form.is_below_cutoff}
+                onChange={e => handleBelowCutoffChange(e.target.checked)}
+                style={{ width: 'auto' }}
+              />
+              <label htmlFor="below-cutoff" style={{ margin: 0, fontSize: 13 }}>미달</label>
+            </div>
           </div>
           <div>
             <label>기숙사</label>
