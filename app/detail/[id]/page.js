@@ -32,7 +32,7 @@ export default function DetailPage({ params }) {
       <h2>{s?.school_name} - {data.departments?.department_name || '학과정보 없음'}</h2>
       <table>
         <tbody>
-          <tr><th style={{width:120}}>지역</th><td>{s?.region}</td></tr>
+          <tr><th style={{ width: 120 }}>지역</th><td>{s?.region}</td></tr>
           <tr><th>전기/후기</th><td>{s?.school_type}</td></tr>
           <tr><th>학과</th><td>{data.departments?.department_name || '학과정보 없음'}</td></tr>
           <tr><th>기준년도</th><td>{data.year}</td></tr>
