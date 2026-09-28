@@ -1,9 +1,13 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const REGIONS = ['전주시','군산시','익산시','정읍시','남원시','김제시','완주군','진안군','무주군','장수군','임실군','순창군','고창군','부안군'];
+
+function formatYearMonth(dateStr) {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export default function Home() {
   const [tab, setTab] = useState('recommend');
@@ -12,13 +16,11 @@ export default function Home() {
   const [recResult, setRecResult] = useState(null);
   const [recSettings, setRecSettings] = useState(null);
   const [loading, setLoading] = useState(false);
-
   const [listRegion, setListRegion] = useState('');
   const [listSchool, setListSchool] = useState('');
   const [listType, setListType] = useState('');
   const [listData, setListData] = useState([]);
   const [schools, setSchools] = useState([]);
-
   const [siteSettings, setSiteSettings] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
@@ -72,18 +74,13 @@ export default function Home() {
       .eq('status', 'approved');
     setLoading(false);
     if (error) { alert('오류: ' + error.message); return; }
-
     let filtered = data || [];
     if (recType) filtered = filtered.filter(r => r.departments?.schools?.school_type === recType);
-
     const stableTh = recSettings?.stable_threshold ?? 10;
     const moderateTh = recSettings?.moderate_threshold ?? -3;
     const challengeTh = recSettings?.challenge_threshold ?? -10;
-
     const groups = { stable: [], moderate: [], challenge: [] };
-
     filtered.forEach(r => {
-      // 미달 표시된 학교는 항상 안정권에 포함 (합격선 계산 없이)
       if (r.is_below_cutoff) {
         groups.stable.push({ ...r, diff: Infinity });
         return;
@@ -95,11 +92,9 @@ export default function Home() {
       else if (diff >= moderateTh) groups.moderate.push(item);
       else if (diff >= challengeTh) groups.challenge.push(item);
     });
-
     groups.stable.sort((a, b) => a.diff - b.diff);
     groups.moderate.sort((a, b) => a.diff - b.diff);
     groups.challenge.sort((a, b) => a.diff - b.diff);
-
     setRecResult(groups);
   }
 
@@ -107,7 +102,7 @@ export default function Home() {
     return (
       <div className="result-item" key={r.id}>
         <div>
-          {r.departments?.schools?.school_name} - {r.departments?.department_name || '학과정보 없음'}
+          <a href={`/detail/${r.id}`}>{r.departments?.schools?.school_name}</a> - {r.departments?.department_name || '학과정보 없음'}
           {r.is_below_cutoff ? (
             <>
               {' '}
@@ -122,7 +117,6 @@ export default function Home() {
     );
   }
 
-  // ---- 전체 목록 수정 관련 ----
   function startEdit(r) {
     setEditingId(r.id);
     setEditForm({
@@ -160,12 +154,9 @@ export default function Home() {
       if (editForm.department_id && deptName !== r.departments?.department_name) {
         await supabase.from('departments').update({ department_name: deptName }).eq('id', editForm.department_id);
       }
-
       const { data: settingsData } = await supabase.from('site_settings').select('approval_mode').eq('id', 1).single();
       const approvalMode = settingsData?.approval_mode ?? false;
-
       const newValue = editForm.is_below_cutoff ? null : parseFloat(editForm.percentage_cut);
-
       const { error } = await supabase
         .from('school_cuts')
         .update({
@@ -178,9 +169,7 @@ export default function Home() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', r.id);
-
       if (error) throw error;
-
       if (r.percentage_cut !== newValue) {
         await supabase.from('edit_history').insert({
           cut_id: r.id,
@@ -188,7 +177,6 @@ export default function Home() {
           new_value: newValue,
         });
       }
-
       setEditingId(null);
       setEditForm(null);
       fetchList();
@@ -282,19 +270,24 @@ export default function Home() {
               </select>
             </div>
           </div>
-
           <table>
             <thead>
               <tr>
-                <th>지역</th><th>학교</th><th>학과</th><th>연도</th><th>합격선</th><th>기숙사</th><th>특징</th><th>최종수정</th>
-                {canEdit && <th>관리</th>}
+                <th style={{ width: '6%' }}>지역</th>
+                <th style={{ width: '10%' }}>학교</th>
+                <th style={{ width: '10%' }}>학과</th>
+                <th style={{ width: '5%' }}>연도</th>
+                <th style={{ width: '7%' }}>합격선</th>
+                <th style={{ width: '6%' }}>기숙사</th>
+                <th style={{ width: '40%' }}>특징</th>
+                <th style={{ width: '8%' }}>최종수정</th>
+                {canEdit && <th style={{ width: '8%' }}>관리</th>}
               </tr>
             </thead>
             <tbody>
               {listData.map(r => {
                 const s = r.departments?.schools;
                 const isEditing = editingId === r.id;
-
                 if (isEditing) {
                   return (
                     <tr key={r.id}>
@@ -347,10 +340,10 @@ export default function Home() {
                         <input
                           value={editForm.feature}
                           onChange={e => updateEditForm('feature', e.target.value)}
-                          style={{ minWidth: 100 }}
+                          style={{ minWidth: 150, width: '100%' }}
                         />
                       </td>
-                      <td>{new Date(r.updated_at).toLocaleString('ko-KR')}</td>
+                      <td style={{ fontSize: 12 }}>{new Date(r.updated_at).toLocaleString('ko-KR')}</td>
                       <td>
                         <button onClick={() => saveEdit(r)} disabled={editSaving} style={{ marginRight: 4 }}>
                           {editSaving ? '저장중...' : '저장'}
@@ -360,17 +353,16 @@ export default function Home() {
                     </tr>
                   );
                 }
-
                 return (
                   <tr key={r.id}>
                     <td>{s?.region}</td>
-                    <td>{s?.school_name}</td>
+                    <td><a href={`/detail/${r.id}`}>{s?.school_name}</a></td>
                     <td>{r.departments?.department_name || '학과정보 없음'}</td>
                     <td>{r.year}</td>
                     <td>{r.is_below_cutoff ? '미달' : (r.percentage_cut != null ? r.percentage_cut + '%' : '-')}</td>
                     <td>{r.dormitory || '-'}</td>
-                    <td>{r.feature || '-'}</td>
-                    <td>{new Date(r.updated_at).toLocaleString('ko-KR')}</td>
+                    <td style={{ wordBreak: 'break-word' }}>{r.feature || '-'}</td>
+                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{formatYearMonth(r.updated_at)}</td>
                     {canEdit && (
                       <td>
                         <button className="secondary" onClick={() => startEdit(r)}>수정</button>
