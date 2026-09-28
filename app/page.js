@@ -278,16 +278,15 @@ export default function Home() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: '6%' }}>지역</th>
-                <th style={{ width: '10%' }}>학교</th>
-                <th style={{ width: '6%' }}>구분</th>
-                <th style={{ width: '9%' }}>학과</th>
-                <th style={{ width: '5%' }}>연도</th>
-                <th style={{ width: '7%' }}>합격선</th>
-                <th style={{ width: '6%' }}>기숙사</th>
-                <th style={{ width: '35%' }}>특징</th>
-                <th style={{ width: '8%' }}>최종수정</th>
-                {canEdit && <th style={{ width: '8%' }}>관리</th>}
+                <th style={{ width: '8%' }}>지역</th>
+                <th style={{ width: '14%' }}>학교</th>
+                <th style={{ width: '8%' }}>구분</th>
+                <th style={{ width: '14%' }}>학과</th>
+                <th style={{ width: '7%' }}>연도</th>
+                <th style={{ width: '10%' }}>합격선</th>
+                <th style={{ width: '8%' }}>기숙사</th>
+                <th style={{ width: '10%' }}>최종수정</th>
+                {canEdit && <th style={{ width: '10%' }}>관리</th>}
               </tr>
             </thead>
             <tbody>
@@ -348,13 +347,6 @@ export default function Home() {
                           <option value="없음">없음</option>
                         </select>
                       </td>
-                      <td>
-                        <input
-                          value={editForm.feature}
-                          onChange={e => updateEditForm('feature', e.target.value)}
-                          style={{ minWidth: 150, width: '100%' }}
-                        />
-                      </td>
                       <td style={{ fontSize: 12 }}>{new Date(r.updated_at).toLocaleString('ko-KR')}</td>
                       <td>
                         <button onClick={() => saveEdit(r)} disabled={editSaving} style={{ marginRight: 4 }}>
@@ -374,7 +366,6 @@ export default function Home() {
                     <td>{r.year}</td>
                     <td>{r.is_below_cutoff ? '미달' : (r.percentage_cut != null ? r.percentage_cut + '%' : '-')}</td>
                     <td>{r.dormitory || '-'}</td>
-                    <td style={{ wordBreak: 'break-word' }}>{r.feature || '-'}</td>
                     <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{formatYearMonth(r.updated_at)}</td>
                     {canEdit && (
                       <td>
@@ -385,10 +376,11 @@ export default function Home() {
                 );
               })}
               {listData.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
               )}
             </tbody>
           </table>
+          <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>💡 특징 정보는 학교명을 클릭하면 상세페이지에서 확인 및 수정할 수 있어요.</p>
         </div>
       )}
     </div>
