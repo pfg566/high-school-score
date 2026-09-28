@@ -117,18 +117,20 @@ export default function Home() {
     );
   }
 
-  function startEdit(r) {
-    setEditingId(r.id);
-    setEditForm({
-      department_name: (r.departments?.department_name === '학과정보 없음') ? '' : (r.departments?.department_name || ''),
-      department_id: r.departments?.id,
-      year: r.year,
-      percentage_cut: r.percentage_cut ?? '',
-      is_below_cutoff: r.is_below_cutoff || false,
-      dormitory: r.dormitory || '없음',
-      feature: r.feature || '',
-    });
-  }
+function startEdit(r) {
+  setEditingId(r.id);
+  setEditForm({
+    department_name: (r.departments?.department_name === '학과정보 없음') ? '' : (r.departments?.department_name || ''),
+    department_id: r.departments?.id,
+    school_id: r.departments?.schools?.id,
+    school_type: r.departments?.schools?.school_type || '전기고',
+    year: r.year,
+    percentage_cut: r.percentage_cut ?? '',
+    is_below_cutoff: r.is_below_cutoff || false,
+    dormitory: r.dormitory || '없음',
+    feature: r.feature || '',
+  });
+}
 
   function cancelEdit() {
     setEditingId(null);
