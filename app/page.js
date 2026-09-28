@@ -152,10 +152,13 @@ function startEdit(r) {
     }
     setEditSaving(true);
     try {
-      const deptName = editForm.department_name.trim() || '학과정보 없음';
-      if (editForm.department_id && deptName !== r.departments?.department_name) {
-        await supabase.from('departments').update({ department_name: deptName }).eq('id', editForm.department_id);
-      }
+const deptName = editForm.department_name.trim() || '학과정보 없음';
+if (editForm.department_id && deptName !== r.departments?.department_name) {
+  await supabase.from('departments').update({ department_name: deptName }).eq('id', editForm.department_id);
+}
+if (editForm.school_id && editForm.school_type !== r.departments?.schools?.school_type) {
+  await supabase.from('schools').update({ school_type: editForm.school_type }).eq('id', editForm.school_id);
+}
       const { data: settingsData } = await supabase.from('site_settings').select('approval_mode').eq('id', 1).single();
       const approvalMode = settingsData?.approval_mode ?? false;
       const newValue = editForm.is_below_cutoff ? null : parseFloat(editForm.percentage_cut);
