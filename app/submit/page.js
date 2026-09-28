@@ -1,9 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-
 const REGIONS = ['전주시','군산시','익산시','정읍시','남원시','김제시','완주군','진안군','무주군','장수군','임실군','순창군','고창군','부안군'];
-
 export default function SubmitPage() {
   const [form, setForm] = useState({
     region: '전주시',
@@ -19,20 +17,16 @@ export default function SubmitPage() {
   const [schoolNames, setSchoolNames] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
-
   useEffect(() => {
     fetchSchoolNames();
   }, []);
-
   async function fetchSchoolNames() {
     const { data } = await supabase.from('schools').select('school_name');
     if (data) setSchoolNames([...new Set(data.map(s => s.school_name))]);
   }
-
   function update(key, value) {
     setForm(prev => ({ ...prev, [key]: value }));
   }
-
   function handleBelowCutoffChange(checked) {
     setForm(prev => ({
       ...prev,
@@ -40,11 +34,9 @@ export default function SubmitPage() {
       percentage_cut: checked ? '' : prev.percentage_cut,
     }));
   }
-
   async function handleSubmit(e) {
     e.preventDefault();
     setMsg(null);
-
     if (!form.school_name) {
       setMsg({ type: 'error', text: '고등학교명을 입력해주세요.' });
       return;
@@ -53,18 +45,24 @@ export default function SubmitPage() {
       setMsg({ type: 'error', text: '합격선을 입력하거나 "미달"에 체크해주세요.' });
       return;
     }
-
     setLoading(true);
     try {
       let { data: existingSchool } = await supabase
         .from('schools')
-        .select('id')
+        .select('id, region, school_type')
         .eq('school_name', form.school_name)
         .maybeSingle();
-
       let schoolId;
       if (existingSchool) {
         schoolId = existingSchool.id;
+        // 지역이나 전기/후기 구분이 이전과 다르면 최신 입력값으로 갱신
+        if (existingSchool.region !== form.region || existingSchool.school_type !== form.school_type) {
+          const { error: updateSchoolError } = await supabase
+            .from('schools')
+            .update({ region: form.region, school_type: form.school_type })
+            .eq('id', schoolId);
+          if (updateSchoolError) throw updateSchoolError;
+        }
       } else {
         const { data: newSchool, error: schoolError } = await supabase
           .from('schools')
@@ -74,16 +72,13 @@ export default function SubmitPage() {
         if (schoolError) throw schoolError;
         schoolId = newSchool.id;
       }
-
       const departmentName = form.department_name.trim() || '학과정보 없음';
-
       let { data: existingDept } = await supabase
         .from('departments')
         .select('id')
         .eq('school_id', schoolId)
         .eq('department_name', departmentName)
         .maybeSingle();
-
       let deptId;
       if (existingDept) {
         deptId = existingDept.id;
@@ -96,23 +91,19 @@ export default function SubmitPage() {
         if (deptError) throw deptError;
         deptId = newDept.id;
       }
-
       const { data: settings } = await supabase
         .from('site_settings')
         .select('approval_mode')
         .eq('id', 1)
         .single();
       const approvalMode = settings?.approval_mode ?? false;
-
       let { data: existingCut } = await supabase
         .from('school_cuts')
         .select('*')
         .eq('department_id', deptId)
         .eq('year', form.year)
         .maybeSingle();
-
       const newValue = form.is_below_cutoff ? null : parseFloat(form.percentage_cut);
-
       if (existingCut) {
         const { error: updateError } = await supabase
           .from('school_cuts')
@@ -126,7 +117,6 @@ export default function SubmitPage() {
           })
           .eq('id', existingCut.id);
         if (updateError) throw updateError;
-
         await supabase.from('edit_history').insert({
           cut_id: existingCut.id,
           old_value: existingCut.percentage_cut,
@@ -146,7 +136,6 @@ export default function SubmitPage() {
           });
         if (insertError) throw insertError;
       }
-
       setMsg({ type: 'success', text: approvalMode ? '제보가 승인 대기 중입니다. 감사합니다!' : '제보가 반영되었습니다. 감사합니다!' });
       setForm(prev => ({ ...prev, department_name: '', percentage_cut: '', is_below_cutoff: false, feature: '' }));
       fetchSchoolNames();
@@ -155,7 +144,6 @@ export default function SubmitPage() {
     }
     setLoading(false);
   }
-
   return (
     <div className="card">
       <h2>정보 제보하기</h2>
