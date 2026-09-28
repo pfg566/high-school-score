@@ -117,20 +117,20 @@ export default function Home() {
     );
   }
 
-function startEdit(r) {
-  setEditingId(r.id);
-  setEditForm({
-    department_name: (r.departments?.department_name === '학과정보 없음') ? '' : (r.departments?.department_name || ''),
-    department_id: r.departments?.id,
-    school_id: r.departments?.schools?.id,
-    school_type: r.departments?.schools?.school_type || '전기고',
-    year: r.year,
-    percentage_cut: r.percentage_cut ?? '',
-    is_below_cutoff: r.is_below_cutoff || false,
-    dormitory: r.dormitory || '없음',
-    feature: r.feature || '',
-  });
-}
+  function startEdit(r) {
+    setEditingId(r.id);
+    setEditForm({
+      department_name: (r.departments?.department_name === '학과정보 없음') ? '' : (r.departments?.department_name || ''),
+      department_id: r.departments?.id,
+      school_id: r.departments?.schools?.id,
+      school_type: r.departments?.schools?.school_type || '전기고',
+      year: r.year,
+      percentage_cut: r.percentage_cut ?? '',
+      is_below_cutoff: r.is_below_cutoff || false,
+      dormitory: r.dormitory || '없음',
+      feature: r.feature || '',
+    });
+  }
 
   function cancelEdit() {
     setEditingId(null);
@@ -152,13 +152,13 @@ function startEdit(r) {
     }
     setEditSaving(true);
     try {
-const deptName = editForm.department_name.trim() || '학과정보 없음';
-if (editForm.department_id && deptName !== r.departments?.department_name) {
-  await supabase.from('departments').update({ department_name: deptName }).eq('id', editForm.department_id);
-}
-if (editForm.school_id && editForm.school_type !== r.departments?.schools?.school_type) {
-  await supabase.from('schools').update({ school_type: editForm.school_type }).eq('id', editForm.school_id);
-}
+      const deptName = editForm.department_name.trim() || '학과정보 없음';
+      if (editForm.department_id && deptName !== r.departments?.department_name) {
+        await supabase.from('departments').update({ department_name: deptName }).eq('id', editForm.department_id);
+      }
+      if (editForm.school_id && editForm.school_type !== r.departments?.schools?.school_type) {
+        await supabase.from('schools').update({ school_type: editForm.school_type }).eq('id', editForm.school_id);
+      }
       const { data: settingsData } = await supabase.from('site_settings').select('approval_mode').eq('id', 1).single();
       const approvalMode = settingsData?.approval_mode ?? false;
       const newValue = editForm.is_below_cutoff ? null : parseFloat(editForm.percentage_cut);
@@ -280,11 +280,12 @@ if (editForm.school_id && editForm.school_type !== r.departments?.schools?.schoo
               <tr>
                 <th style={{ width: '6%' }}>지역</th>
                 <th style={{ width: '10%' }}>학교</th>
-                <th style={{ width: '10%' }}>학과</th>
+                <th style={{ width: '6%' }}>구분</th>
+                <th style={{ width: '9%' }}>학과</th>
                 <th style={{ width: '5%' }}>연도</th>
                 <th style={{ width: '7%' }}>합격선</th>
                 <th style={{ width: '6%' }}>기숙사</th>
-                <th style={{ width: '40%' }}>특징</th>
+                <th style={{ width: '35%' }}>특징</th>
                 <th style={{ width: '8%' }}>최종수정</th>
                 {canEdit && <th style={{ width: '8%' }}>관리</th>}
               </tr>
@@ -298,6 +299,12 @@ if (editForm.school_id && editForm.school_type !== r.departments?.schools?.schoo
                     <tr key={r.id}>
                       <td>{s?.region}</td>
                       <td>{s?.school_name}</td>
+                      <td>
+                        <select value={editForm.school_type} onChange={e => updateEditForm('school_type', e.target.value)}>
+                          <option value="전기고">전기고</option>
+                          <option value="후기고">후기고</option>
+                        </select>
+                      </td>
                       <td>
                         <input
                           value={editForm.department_name}
@@ -362,6 +369,7 @@ if (editForm.school_id && editForm.school_type !== r.departments?.schools?.schoo
                   <tr key={r.id}>
                     <td>{s?.region}</td>
                     <td><a href={`/detail/${r.id}`}>{s?.school_name}</a></td>
+                    <td>{s?.school_type}</td>
                     <td>{r.departments?.department_name || '학과정보 없음'}</td>
                     <td>{r.year}</td>
                     <td>{r.is_below_cutoff ? '미달' : (r.percentage_cut != null ? r.percentage_cut + '%' : '-')}</td>
@@ -377,7 +385,7 @@ if (editForm.school_id && editForm.school_type !== r.departments?.schools?.schoo
                 );
               })}
               {listData.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#999' }}>데이터가 없어요.</td></tr>
               )}
             </tbody>
           </table>
