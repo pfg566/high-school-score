@@ -54,7 +54,7 @@ export default function Home() {
   async function fetchList() {
     const { data } = await supabase
       .from('school_cuts')
-      .select('*, departments(id, department_name, schools(school_name, region, school_type))')
+      .select('*, departments(id, department_name, schools(id, school_name, region, school_type))')
       .eq('status', 'approved')
       .order('updated_at', { ascending: false });
     let filtered = data || [];
