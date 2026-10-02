@@ -236,21 +236,21 @@ export default function Home() {
 
     setSchools(allSchools);
 
-    // 올해 자료와 전체 연도 자료를 따로 모읍니다.
+    // 학교별 전체 승인 자료와 올해 자료를 따로 모읍니다.
+    const allCutsBySchoolId = new Map();
     const currentCutsBySchoolId = new Map();
-    const latestCutBySchoolId = new Map();
 
     approvedCuts.forEach(cut => {
       const schoolId = cut.departments?.schools?.id;
 
       if (!schoolId) return;
 
-      // 전체 연도 중 가장 최근 자료 1건을 상세페이지 링크용으로 보관
-      if (!latestCutBySchoolId.has(schoolId)) {
-        latestCutBySchoolId.set(schoolId, cut);
+      if (!allCutsBySchoolId.has(schoolId)) {
+        allCutsBySchoolId.set(schoolId, []);
       }
 
-      // 전체 목록에 실제로 표시할 것은 현재 연도 자료만
+      allCutsBySchoolId.get(schoolId).push(cut);
+
       if (Number(cut.year) === CURRENT_YEAR) {
         if (!currentCutsBySchoolId.has(schoolId)) {
           currentCutsBySchoolId.set(schoolId, []);
@@ -282,7 +282,7 @@ export default function Home() {
 
         const matchesData =
           !onlyWithData ||
-          latestCutBySchoolId.has(school.id);
+          allCutsBySchoolId.has(school.id);
 
         return (
           matchesSchool &&
@@ -307,19 +307,52 @@ export default function Home() {
           }));
         }
 
-        const latestCut =
-          latestCutBySchoolId.get(school.id);
+        const allSchoolCuts =
+          allCutsBySchoolId.get(school.id) || [];
 
+        // 올해 자료가 없으면 가장 최근 과거 연도의
+        // 모든 학과 자료를 전체목록에 대신 보여줍니다.
+        if (allSchoolCuts.length > 0) {
+          const latestYear = Math.max(
+            ...allSchoolCuts.map(cut =>
+              Number(cut.year)
+            )
+          );
+
+          const latestYearCuts =
+            allSchoolCuts.filter(
+              cut =>
+                Number(cut.year) === latestYear
+            );
+
+          return latestYearCuts.map(cut => ({
+            ...cut,
+            // 실제 현재연도 자료는 아니므로 수정 시에는
+            // 과거 행을 덮어쓰지 않고 새 현재연도 자료를 만들게 합니다.
+            id: null,
+            sourceCutId: cut.id,
+            hasCutData: false,
+            hasAnyHistory: true,
+            isPastFallback: true,
+            detailId: cut.id,
+            rowKey: `past-${cut.id}`,
+            departments: {
+              ...cut.departments,
+              schools: school
+            }
+          }));
+        }
+
+        // 올해/과거 자료가 모두 없는 학교
         return [
           {
             id: null,
             rowKey: `school-${school.id}`,
             hasCutData: false,
-            hasAnyHistory: !!latestCut,
-            detailId: latestCut?.id || null,
-            // 올해 자료가 없고 과거 자료만 있으면
-            // 가장 최근 과거 자료의 연도를 표시합니다.
-            year: latestCut?.year || null,
+            hasAnyHistory: false,
+            isPastFallback: false,
+            detailId: null,
+            year: null,
             percentage_cut: null,
             graph_value: null,
             cutoff_text: null,
@@ -329,10 +362,8 @@ export default function Home() {
             feature: null,
             updated_at: null,
             departments: {
-              id: latestCut?.departments?.id || null,
-              department_name:
-                latestCut?.departments
-                  ?.department_name || null,
+              id: null,
+              department_name: null,
               schools: school
             }
           }
@@ -495,15 +526,13 @@ export default function Home() {
 
     setEditForm({
       department_name:
-        hasCutData &&
+        r.departments?.department_name &&
         r.departments?.department_name !==
           '학과정보 없음'
           ? r.departments?.department_name || ''
           : '',
       department_id:
-        hasCutData
-          ? r.departments?.id
-          : null,
+        r.departments?.id || null,
       school_id:
         r.departments?.schools?.id,
       school_type:
@@ -1575,27 +1604,17 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {hasCutData ? (
-                          r.detailId ? (
-                            <a
-                              href={`/detail/${r.detailId}`}
-                            >
-                              {r.departments
-                                ?.department_name ||
-                                '학과정보 없음'}
-                            </a>
-                          ) : (
-                            r.departments
-                              ?.department_name ||
-                              '학과정보 없음'
-                          )
-                        ) : r.detailId ? (
+                        {r.detailId ? (
                           <a
                             href={`/detail/${r.detailId}`}
                           >
-                            과거 자료 보기
+                            {r.departments
+                              ?.department_name ||
+                              '학과정보 없음'}
                           </a>
                         ) : (
+                          r.departments
+                            ?.department_name ||
                           '정보 없음'
                         )}
                       </td>
@@ -1607,11 +1626,11 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {!hasCutData
-                          ? '정보 없음'
-                          : getCutoffDisplayText(r)}
+                        {r.detailId
+                          ? getCutoffDisplayText(r)
+                          : '정보 없음'}
 
-                        {hasCutData &&
+                        {r.detailId &&
                           r.is_estimated && (
                             <div
                               style={{
@@ -1626,7 +1645,7 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {hasCutData
+                        {r.detailId
                           ? r.dormitory ||
                             '정보 없음'
                           : '정보 없음'}
@@ -1638,7 +1657,7 @@ export default function Home() {
                           whiteSpace: 'nowrap'
                         }}
                       >
-                        {hasCutData &&
+                        {r.detailId &&
                         r.updated_at
                           ? formatYearMonth(
                               r.updated_at
@@ -1688,9 +1707,7 @@ export default function Home() {
               marginTop: 8
             }}
           >
-            💡 같은 학교의 지역과 학교명은 한 번만 표시되고,
-            학과별 합격선은 아래 행으로 이어집니다. 학과명을 클릭하면
-            해당 학과의 상세페이지와 연도별 그래프를 볼 수 있어요.
+            💡 같은 학교의 지역과 학교명은 한 번만 표시되고, 학과별 자료는 아래 행으로 이어집니다. 올해 자료가 없으면 가장 최근 과거 연도의 학과·합격선·기숙사를 대신 표시하며, 학과명을 클릭하면 해당 학과의 상세페이지와 연도별 그래프를 볼 수 있어요.
           </p>
         </div>
       )}
