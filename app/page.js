@@ -752,6 +752,38 @@ export default function Home() {
     ? siteSettings.allow_public_edit !== false
     : true;
 
+  // 같은 학교의 여러 학과를 한 그룹으로 묶습니다.
+  // 전체목록에서는 지역/학교명은 한 번만 표시하고,
+  // 학과별 정보는 아래 행으로 이어서 보여줍니다.
+  const groupedListData = [];
+  const groupedListMap = new Map();
+
+  listData.forEach(row => {
+    const school = row.departments?.schools;
+    const key = school?.id
+      ? `school-${school.id}`
+      : row.rowKey || `row-${row.id}`;
+
+    if (!groupedListMap.has(key)) {
+      const group = {
+        key,
+        school,
+        rows: [],
+        primaryDetailId: null
+      };
+
+      groupedListMap.set(key, group);
+      groupedListData.push(group);
+    }
+
+    const group = groupedListMap.get(key);
+    group.rows.push(row);
+
+    if (!group.primaryDetailId && row.detailId) {
+      group.primaryDetailId = row.detailId;
+    }
+  });
+
   return (
     <div>
       <div className="tabs">
@@ -1005,9 +1037,16 @@ export default function Home() {
               </thead>
 
               <tbody>
-                {listData.map(r => {
+                {groupedListData.flatMap(group =>
+                  group.rows.map((r, rowIndex) => {
                   const s =
                     r.departments?.schools;
+
+                  const isFirstSchoolRow =
+                    rowIndex === 0;
+
+                  const schoolRowSpan =
+                    group.rows.length;
 
                   const hasCutData =
                     r.hasCutData !== false;
@@ -1019,15 +1058,41 @@ export default function Home() {
                   if (isEditing) {
                     return (
                       <tr key={r.rowKey || r.id}>
-                        <td>
-                          {s?.region ||
-                            '정보 없음'}
-                        </td>
+                        {isFirstSchoolRow && (
+                          <td
+                            rowSpan={schoolRowSpan}
+                            style={{
+                              verticalAlign: 'top',
+                              paddingTop: 12
+                            }}
+                          >
+                            {s?.region ||
+                              '정보 없음'}
+                          </td>
+                        )}
 
-                        <td>
-                          {s?.school_name ||
-                            '정보 없음'}
-                        </td>
+                        {isFirstSchoolRow && (
+                          <td
+                            rowSpan={schoolRowSpan}
+                            style={{
+                              verticalAlign: 'top',
+                              paddingTop: 12,
+                              fontWeight: 600
+                            }}
+                          >
+                            {group.primaryDetailId ? (
+                              <a
+                                href={`/detail/${group.primaryDetailId}`}
+                              >
+                                {s?.school_name ||
+                                  '정보 없음'}
+                              </a>
+                            ) : (
+                              s?.school_name ||
+                              '정보 없음'
+                            )}
+                          </td>
+                        )}
 
                         <td>
                           <select
@@ -1259,23 +1324,40 @@ export default function Home() {
 
                   return (
                     <tr key={r.rowKey || r.id}>
-                      <td>
-                        {s?.region || '정보 없음'}
-                      </td>
+                      {isFirstSchoolRow && (
+                        <td
+                          rowSpan={schoolRowSpan}
+                          style={{
+                            verticalAlign: 'top',
+                            paddingTop: 12
+                          }}
+                        >
+                          {s?.region || '정보 없음'}
+                        </td>
+                      )}
 
-                      <td>
-                        {r.detailId ? (
-                          <a
-                            href={`/detail/${r.detailId}`}
-                          >
-                            {s?.school_name ||
-                              '정보 없음'}
-                          </a>
-                        ) : (
-                          s?.school_name ||
-                          '정보 없음'
-                        )}
-                      </td>
+                      {isFirstSchoolRow && (
+                        <td
+                          rowSpan={schoolRowSpan}
+                          style={{
+                            verticalAlign: 'top',
+                            paddingTop: 12,
+                            fontWeight: 600
+                          }}
+                        >
+                          {group.primaryDetailId ? (
+                            <a
+                              href={`/detail/${group.primaryDetailId}`}
+                            >
+                              {s?.school_name ||
+                                '정보 없음'}
+                            </a>
+                          ) : (
+                            s?.school_name ||
+                            '정보 없음'
+                          )}
+                        </td>
+                      )}
 
                       <td>
                         {s?.school_type ||
@@ -1283,11 +1365,29 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {hasCutData
-                          ? r.departments
+                        {hasCutData ? (
+                          r.detailId ? (
+                            <a
+                              href={`/detail/${r.detailId}`}
+                            >
+                              {r.departments
+                                ?.department_name ||
+                                '학과정보 없음'}
+                            </a>
+                          ) : (
+                            r.departments
                               ?.department_name ||
-                            '정보 없음'
-                          : '정보 없음'}
+                              '학과정보 없음'
+                          )
+                        ) : r.detailId ? (
+                          <a
+                            href={`/detail/${r.detailId}`}
+                          >
+                            과거 자료 보기
+                          </a>
+                        ) : (
+                          '정보 없음'
+                        )}
                       </td>
 
                       <td>
@@ -1360,7 +1460,8 @@ export default function Home() {
                       )}
                     </tr>
                   );
-                })}
+                  })
+                )}
 
                 {listData.length === 0 && (
                   <tr>
@@ -1387,10 +1488,9 @@ export default function Home() {
               marginTop: 8
             }}
           >
-            💡 합격선 정보가 없는 학교는 ‘정보
-            없음’으로 표시됩니다. 정보가 있는 학교는
-            학교명을 클릭하면 상세페이지에서 확인할 수
-            있어요.
+            💡 같은 학교의 지역과 학교명은 한 번만 표시되고,
+            학과별 합격선은 아래 행으로 이어집니다. 학과명을 클릭하면
+            해당 학과의 상세페이지와 연도별 그래프를 볼 수 있어요.
           </p>
         </div>
       )}
