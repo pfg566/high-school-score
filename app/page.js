@@ -20,6 +20,8 @@ const REGIONS = [
   '부안군'
 ];
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 function formatYearMonth(dateStr) {
   if (!dateStr) return '정보 없음';
 
@@ -210,6 +212,7 @@ export default function Home() {
           )
         `)
         .eq('status', 'approved')
+        .order('year', { ascending: false })
         .order('updated_at', { ascending: false })
     ]);
 
@@ -232,70 +235,102 @@ export default function Home() {
 
     setSchools(allSchools);
 
-    const cutsBySchoolId = new Map();
+    // 올해 자료와 전체 연도 자료를 따로 모읍니다.
+    const currentCutsBySchoolId = new Map();
+    const latestCutBySchoolId = new Map();
 
     approvedCuts.forEach(cut => {
       const schoolId = cut.departments?.schools?.id;
 
       if (!schoolId) return;
 
-      if (!cutsBySchoolId.has(schoolId)) {
-        cutsBySchoolId.set(schoolId, []);
+      // 전체 연도 중 가장 최근 자료 1건을 상세페이지 링크용으로 보관
+      if (!latestCutBySchoolId.has(schoolId)) {
+        latestCutBySchoolId.set(schoolId, cut);
       }
 
-      cutsBySchoolId.get(schoolId).push(cut);
-    });
-
-    const searchText = listSchool.trim().toLowerCase();
-
-    const filteredSchools = allSchools.filter(school => {
-      const schoolName = school.school_name?.toLowerCase() || '';
-
-      const matchesSchool =
-        !searchText || schoolName.includes(searchText);
-
-      const matchesRegion =
-        !listRegion || school.region === listRegion;
-
-      const matchesType =
-        !listType || school.school_type === listType;
-
-      return matchesSchool && matchesRegion && matchesType;
-    });
-
-    const rows = filteredSchools.flatMap(school => {
-      const schoolCuts = cutsBySchoolId.get(school.id) || [];
-
-      if (schoolCuts.length > 0) {
-        return schoolCuts.map(cut => ({
-          ...cut,
-          hasCutData: true,
-          rowKey: `cut-${cut.id}`
-        }));
-      }
-
-      return [
-        {
-          id: null,
-          rowKey: `school-${school.id}`,
-          hasCutData: false,
-          year: null,
-          percentage_cut: null,
-          graph_value: null,
-          cutoff_text: null,
-          is_estimated: false,
-          is_below_cutoff: false,
-          dormitory: null,
-          feature: null,
-          updated_at: null,
-          departments: {
-            id: null,
-            department_name: null,
-            schools: school
-          }
+      // 전체 목록에 실제로 표시할 것은 현재 연도 자료만
+      if (Number(cut.year) === CURRENT_YEAR) {
+        if (!currentCutsBySchoolId.has(schoolId)) {
+          currentCutsBySchoolId.set(schoolId, []);
         }
-      ];
+
+        currentCutsBySchoolId.get(schoolId).push(cut);
+      }
     });
+
+    const searchText =
+      listSchool.trim().toLowerCase();
+
+    const filteredSchools =
+      allSchools.filter(school => {
+        const schoolName =
+          school.school_name?.toLowerCase() || '';
+
+        const matchesSchool =
+          !searchText ||
+          schoolName.includes(searchText);
+
+        const matchesRegion =
+          !listRegion ||
+          school.region === listRegion;
+
+        const matchesType =
+          !listType ||
+          school.school_type === listType;
+
+        return (
+          matchesSchool &&
+          matchesRegion &&
+          matchesType
+        );
+      });
+
+    const rows = filteredSchools.flatMap(
+      school => {
+        const currentCuts =
+          currentCutsBySchoolId.get(school.id) || [];
+
+        if (currentCuts.length > 0) {
+          return currentCuts.map(cut => ({
+            ...cut,
+            hasCutData: true,
+            hasAnyHistory: true,
+            detailId: cut.id,
+            rowKey: `cut-${cut.id}`
+          }));
+        }
+
+        const latestCut =
+          latestCutBySchoolId.get(school.id);
+
+        return [
+          {
+            id: null,
+            rowKey: `school-${school.id}`,
+            hasCutData: false,
+            hasAnyHistory: !!latestCut,
+            detailId: latestCut?.id || null,
+            year: null,
+            percentage_cut: null,
+            graph_value: null,
+            cutoff_text: null,
+            is_estimated: false,
+            is_below_cutoff: false,
+            dormitory: null,
+            feature: null,
+            updated_at: null,
+            departments: {
+              id: latestCut?.departments?.id || null,
+              department_name:
+                latestCut?.departments
+                  ?.department_name || null,
+              schools: school
+            }
+          }
+        ];
+      }
+    );
 
     setListData(rows);
   }
@@ -838,7 +873,7 @@ export default function Home() {
 
       {tab === 'list' && (
         <div className="card">
-          <h2>전체 목록</h2>
+          <h2>전체 목록 ({CURRENT_YEAR}년 기준)</h2>
 
           <div className="form-row">
             <div>
@@ -1193,9 +1228,9 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {hasCutData ? (
+                        {r.detailId ? (
                           <a
-                            href={`/detail/${r.id}`}
+                            href={`/detail/${r.detailId}`}
                           >
                             {s?.school_name ||
                               '정보 없음'}
