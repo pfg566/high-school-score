@@ -1,10 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabaseClient';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
+
+const REGIONS = [
+  '전주시',
+  '군산시',
+  '익산시',
+  '정읍시',
+  '남원시',
+  '김제시',
+  '완주군',
+  '진안군',
+  '무주군',
+  '장수군',
+  '임실군',
+  '순창군',
+  '고창군',
+  '부안군'
+];
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+function formatYearMonth(dateStr) {
+  if (!dateStr) return '정보 없음';
+
+  const d = new Date(dateStr);
+
+  if (Number.isNaN(d.getTime())) {
+    return '정보 없음';
+  }
+
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 
 function getCutoffDisplayText(row) {
-  if (!row) return '-';
+  if (!row) return '정보 없음';
   if (row.is_below_cutoff) return '미달';
 
   const text = row.cutoff_text?.trim();
@@ -14,315 +46,158 @@ function getCutoffDisplayText(row) {
     return `${row.percentage_cut}%`;
   }
 
-  return '-';
+  return '정보 없음';
 }
 
-function CutoffHistoryChart({ history }) {
-  const chartData = history.filter(row => row.year != null);
+function inferGraphValueFromCutoffText(rawText) {
+  const text = String(rawText || '')
+    .trim()
+    .replace(/\s+/g, ' ');
 
-  if (chartData.length === 0) {
-    return (
-      <div
-        style={{
-          marginTop: 20,
-          marginBottom: 24,
-          padding: 20,
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          textAlign: 'center',
-          color: '#888'
-        }}
-      >
-        연도별 합격선 정보가 없어요.
-      </div>
-    );
+  if (!text) return null;
+
+  // 예: 70~80%, 70~80%대, 70 ~ 80
+  const rangeMatch = text.match(
+    /(\d+(?:\.\d+)?)\s*~\s*(\d+(?:\.\d+)?)\s*%?/
+  );
+
+  if (rangeMatch) {
+    const min = Number(rangeMatch[1]);
+    const max = Number(rangeMatch[2]);
+
+    if (
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      min >= 0 &&
+      max <= 100 &&
+      min <= max
+    ) {
+      return Number(((min + max) / 2).toFixed(1));
+    }
   }
 
-  const width = Math.max(720, chartData.length * 150);
-  const height = 360;
-  const padding = {
-    top: 35,
-    right: 35,
-    bottom: 65,
-    left: 58
-  };
+  // 예: 90% 초반대 / 80% 중반 / 70% 후반대
+  const bandMatch = text.match(
+    /(\d+(?:\.\d+)?)\s*%\s*(초반대?|중반대?|후반대?)/
+  );
 
-  const graphWidth = width - padding.left - padding.right;
-  const graphHeight = height - padding.top - padding.bottom;
+  if (bandMatch) {
+    const base = Number(bandMatch[1]);
+    const band = bandMatch[2];
+    const add = band.startsWith('초반')
+      ? 2
+      : band.startsWith('중반')
+        ? 5
+        : 7;
 
-  const getX = index => {
-    if (chartData.length === 1) {
-      return padding.left + graphWidth / 2;
+    const value = base + add;
+
+    if (Number.isFinite(value)) {
+      return Math.min(100, value);
     }
+  }
 
-    return (
-      padding.left +
-      (index / (chartData.length - 1)) * graphWidth
-    );
-  };
+  // 예: 90%대 -> 대표값 92
+  const decadeMatch = text.match(/(\d+(?:\.\d+)?)\s*%대/);
 
-  const getY = value =>
-    padding.top + ((100 - value) / 100) * graphHeight;
+  if (decadeMatch) {
+    const base = Number(decadeMatch[1]);
+    const value = base + 2;
 
-  const points = chartData.map((row, index) => {
-    const rawGraphValue =
-      row.graph_value ?? row.percentage_cut ?? null;
+    if (Number.isFinite(value)) {
+      return Math.min(100, value);
+    }
+  }
 
-    const graphValue =
-      rawGraphValue === null || rawGraphValue === undefined
-        ? null
-        : Number(rawGraphValue);
+  return null;
+}
 
-    const hasGraphValue =
-      !row.is_below_cutoff &&
-      Number.isFinite(graphValue) &&
-      graphValue >= 0 &&
-      graphValue <= 100;
+export default function Home() {
+  const [tab, setTab] = useState('recommend');
 
-    return {
-      ...row,
-      x: getX(index),
-      graphValue,
-      y: hasGraphValue ? getY(graphValue) : null,
-      hasGraphValue,
-      displayText: getCutoffDisplayText(row)
-    };
-  });
+  const [percentage, setPercentage] = useState('');
+  const [recType, setRecType] = useState('');
+  const [recResult, setRecResult] = useState(null);
+  const [recSettings, setRecSettings] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const lineSegments = [];
-  let currentSegment = [];
+  const [listRegion, setListRegion] = useState('');
+  const [listSchool, setListSchool] = useState('');
+  const [listType, setListType] = useState('');
+  const [onlyWithData, setOnlyWithData] = useState(false);
+  const [listData, setListData] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
 
-  points.forEach(point => {
-    if (point.hasGraphValue) {
-      currentSegment.push(point);
+  const [schools, setSchools] = useState([]);
+  const [siteSettings, setSiteSettings] = useState(null);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  useEffect(() => {
+    fetchSchools();
+    fetchRecSettings();
+    fetchSiteSettings();
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'list') {
+      fetchList();
+    }
+  }, [tab, listRegion, listSchool, listType, onlyWithData]);
+
+  async function fetchSchools() {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('id, school_name, region, school_type')
+      .order('school_name');
+
+    if (error) {
+      console.error('학교 목록 조회 오류:', error);
       return;
     }
 
-    if (currentSegment.length > 0) {
-      lineSegments.push(currentSegment);
-      currentSegment = [];
-    }
-  });
-
-  if (currentSegment.length > 0) {
-    lineSegments.push(currentSegment);
+    setSchools(data || []);
   }
 
-  const yTicks = [0, 20, 40, 60, 80, 100];
+  async function fetchRecSettings() {
+    const { data } = await supabase
+      .from('recommendation_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
 
-  return (
-    <div
-      style={{
-        marginTop: 20,
-        marginBottom: 24,
-        border: '1px solid #e5e7eb',
-        borderRadius: 12,
-        padding: 16
-      }}
-    >
-      <div style={{ marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>연도별 백분율 합격선</h3>
-        <div
-          style={{
-            fontSize: 12,
-            color: '#888',
-            marginTop: 4
-          }}
-        >
-          Y축은 0~100%로 고정되며, 범위·초반·중반·후반 자료는
-          그래프용 대표값으로 연결됩니다.
-        </div>
-      </div>
+    if (data) {
+      setRecSettings(data);
+    }
+  }
 
-      <div style={{ width: '100%', overflowX: 'auto' }}>
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          style={{
-            width: '100%',
-            minWidth: Math.min(width, 620),
-            display: 'block'
-          }}
-          role="img"
-          aria-label="연도별 백분율 합격선 선 그래프"
-        >
-          {yTicks.map(value => {
-            const y = getY(value);
+  async function fetchSiteSettings() {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
 
-            return (
-              <g key={value}>
-                <line
-                  x1={padding.left}
-                  x2={width - padding.right}
-                  y1={y}
-                  y2={y}
-                  stroke="#e5e7eb"
-                  strokeWidth="1"
-                />
-                <text
-                  x={padding.left - 10}
-                  y={y + 4}
-                  textAnchor="end"
-                  fontSize="11"
-                  fill="#777"
-                >
-                  {value}%
-                </text>
-              </g>
-            );
-          })}
+    if (data) {
+      setSiteSettings(data);
+    }
+  }
 
-          <line
-            x1={padding.left}
-            x2={padding.left}
-            y1={padding.top}
-            y2={padding.top + graphHeight}
-            stroke="#999"
-          />
-          <line
-            x1={padding.left}
-            x2={width - padding.right}
-            y1={padding.top + graphHeight}
-            y2={padding.top + graphHeight}
-            stroke="#999"
-          />
+  async function fetchList() {
+    setListLoading(true);
 
-          {lineSegments.map((segment, index) => {
-            if (segment.length < 2) return null;
+    const [
+      { data: schoolRows, error: schoolError },
+      { data: cutRows, error: cutError }
+    ] = await Promise.all([
+      supabase
+        .from('schools')
+        .select('id, school_name, region, school_type')
+        .order('school_name'),
 
-            const polylinePoints = segment
-              .map(point => `${point.x},${point.y}`)
-              .join(' ');
-
-            return (
-              <polyline
-                key={`segment-${index}`}
-                points={polylinePoints}
-                fill="none"
-                stroke="#2563eb"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            );
-          })}
-
-          {points.map(point => {
-            if (!point.hasGraphValue) {
-              return (
-                <g key={point.id}>
-                  <text
-                    x={point.x}
-                    y={padding.top + graphHeight - 12}
-                    textAnchor="middle"
-                    fontSize="11"
-                    fontWeight="600"
-                    fill="#666"
-                  >
-                    {point.is_below_cutoff ? '미달' : point.displayText}
-                  </text>
-                </g>
-              );
-            }
-
-            const labelY = Math.min(
-              point.y + 20,
-              padding.top + graphHeight - 8
-            );
-
-            return (
-              <g key={point.id}>
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r="6"
-                  fill={point.is_estimated ? 'white' : '#2563eb'}
-                  stroke="#2563eb"
-                  strokeWidth={point.is_estimated ? '3' : '2'}
-                />
-
-                <text
-                  x={point.x}
-                  y={labelY}
-                  textAnchor="middle"
-                  fontSize="11"
-                  fontWeight="600"
-                  fill="#333"
-                >
-                  {point.displayText}
-                </text>
-              </g>
-            );
-          })}
-
-          {points.map(point => (
-            <text
-              key={`year-${point.id}`}
-              x={point.x}
-              y={height - 22}
-              textAnchor="middle"
-              fontSize="12"
-              fill="#555"
-            >
-              {point.year}
-            </text>
-          ))}
-
-          <text
-            x="16"
-            y={padding.top + graphHeight / 2}
-            fontSize="11"
-            fill="#777"
-            textAnchor="middle"
-            transform={`rotate(-90 16 ${
-              padding.top + graphHeight / 2
-            })`}
-          >
-            백분율 합격선
-          </text>
-        </svg>
-      </div>
-
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 12,
-          color: '#777',
-          lineHeight: 1.6
-        }}
-      >
-        <div>● 채운 점: 정확한 수치</div>
-        <div>○ 빈 점: 범위·대략 자료의 그래프용 대표값</div>
-        <div>
-          ※ 범위·대략 자료의 대표값은 그래프 표시에만 사용하며 추천 계산에는
-          사용하지 않습니다.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function DetailPage({ params }) {
-  const { id } = params;
-
-  const [data, setData] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editingFeature, setEditingFeature] = useState(false);
-  const [featureValue, setFeatureValue] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetchDetail();
-  }, [id]);
-
-  async function fetchDetail() {
-    setLoading(true);
-
-    try {
-      const {
-        data: detailData,
-        error: detailError
-      } = await supabase
+      supabase
         .from('school_cuts')
         .select(`
           *,
@@ -337,239 +212,1188 @@ export default function DetailPage({ params }) {
             )
           )
         `)
-        .eq('id', id)
-        .single();
+        .eq('status', 'approved')
+        .order('year', { ascending: false })
+        .order('updated_at', { ascending: false })
+    ]);
 
-      if (detailError) throw detailError;
+    setListLoading(false);
 
-      setData(detailData);
-      setFeatureValue(detailData?.feature || '');
+    if (schoolError) {
+      console.error('학교 목록 조회 오류:', schoolError);
+      setListData([]);
+      return;
+    }
 
-      const departmentId = detailData?.departments?.id;
+    if (cutError) {
+      console.error('합격선 목록 조회 오류:', cutError);
+      setListData([]);
+      return;
+    }
 
-      if (!departmentId) {
-        setHistory([]);
+    const allSchools = schoolRows || [];
+    const approvedCuts = cutRows || [];
+
+    setSchools(allSchools);
+
+    // 올해 자료와 전체 연도 자료를 따로 모읍니다.
+    const currentCutsBySchoolId = new Map();
+    const latestCutBySchoolId = new Map();
+
+    approvedCuts.forEach(cut => {
+      const schoolId = cut.departments?.schools?.id;
+
+      if (!schoolId) return;
+
+      // 전체 연도 중 가장 최근 자료 1건을 상세페이지 링크용으로 보관
+      if (!latestCutBySchoolId.has(schoolId)) {
+        latestCutBySchoolId.set(schoolId, cut);
+      }
+
+      // 전체 목록에 실제로 표시할 것은 현재 연도 자료만
+      if (Number(cut.year) === CURRENT_YEAR) {
+        if (!currentCutsBySchoolId.has(schoolId)) {
+          currentCutsBySchoolId.set(schoolId, []);
+        }
+
+        currentCutsBySchoolId.get(schoolId).push(cut);
+      }
+    });
+
+    const searchText =
+      listSchool.trim().toLowerCase();
+
+    const filteredSchools =
+      allSchools.filter(school => {
+        const schoolName =
+          school.school_name?.toLowerCase() || '';
+
+        const matchesSchool =
+          !searchText ||
+          schoolName.includes(searchText);
+
+        const matchesRegion =
+          !listRegion ||
+          school.region === listRegion;
+
+        const matchesType =
+          !listType ||
+          school.school_type === listType;
+
+        const matchesData =
+          !onlyWithData ||
+          latestCutBySchoolId.has(school.id);
+
+        return (
+          matchesSchool &&
+          matchesRegion &&
+          matchesType &&
+          matchesData
+        );
+      });
+
+    const rows = filteredSchools.flatMap(
+      school => {
+        const currentCuts =
+          currentCutsBySchoolId.get(school.id) || [];
+
+        if (currentCuts.length > 0) {
+          return currentCuts.map(cut => ({
+            ...cut,
+            hasCutData: true,
+            hasAnyHistory: true,
+            detailId: cut.id,
+            rowKey: `cut-${cut.id}`
+          }));
+        }
+
+        const latestCut =
+          latestCutBySchoolId.get(school.id);
+
+        return [
+          {
+            id: null,
+            rowKey: `school-${school.id}`,
+            hasCutData: false,
+            hasAnyHistory: !!latestCut,
+            detailId: latestCut?.id || null,
+            year: null,
+            percentage_cut: null,
+            graph_value: null,
+            cutoff_text: null,
+            is_estimated: false,
+            is_below_cutoff: false,
+            dormitory: null,
+            feature: null,
+            updated_at: null,
+            departments: {
+              id: latestCut?.departments?.id || null,
+              department_name:
+                latestCut?.departments
+                  ?.department_name || null,
+              schools: school
+            }
+          }
+        ];
+      }
+    );
+
+    setListData(rows);
+  }
+
+  async function handleRecommend() {
+    if (!percentage) {
+      alert('성적을 입력해주세요.');
+      return;
+    }
+
+    setLoading(true);
+
+    const p = parseFloat(percentage);
+
+    const { data, error } = await supabase
+      .from('school_cuts')
+      .select(`
+        *,
+        departments(
+          department_name,
+          schools(
+            school_name,
+            region,
+            school_type
+          )
+        )
+      `)
+      .eq('status', 'approved')
+      .eq('year', CURRENT_YEAR);
+
+    setLoading(false);
+
+    if (error) {
+      alert('오류: ' + error.message);
+      return;
+    }
+
+    let filtered = data || [];
+
+    if (recType) {
+      filtered = filtered.filter(
+        r => r.departments?.schools?.school_type === recType
+      );
+    }
+
+    const stableTh = recSettings?.stable_threshold ?? 10;
+    const moderateTh = recSettings?.moderate_threshold ?? -3;
+    const challengeTh = recSettings?.challenge_threshold ?? -10;
+
+    const groups = {
+      stable: [],
+      moderate: [],
+      challenge: []
+    };
+
+    filtered.forEach(r => {
+      if (r.is_below_cutoff) {
+        groups.stable.push({
+          ...r,
+          diff: Infinity
+        });
         return;
       }
 
-      const {
-        data: historyRows,
-        error: historyError
-      } = await supabase
-        .from('school_cuts')
-        .select(`
-          id,
-          department_id,
-          year,
-          percentage_cut,
-          graph_value,
-          cutoff_text,
-          is_estimated,
-          is_below_cutoff,
-          updated_at
-        `)
-        .eq('department_id', departmentId)
-        .eq('status', 'approved')
-        .order('year', { ascending: true });
+      if (
+        r.percentage_cut === null ||
+        r.percentage_cut === undefined
+      ) {
+        return;
+      }
 
-      if (historyError) throw historyError;
+      const diff = r.percentage_cut - p;
 
-      // 동일 학과/연도 데이터가 여러 개면 가장 최근 수정본만 표시
-      const latestByYear = new Map();
+      const item = {
+        ...r,
+        diff
+      };
 
-      (historyRows || []).forEach(row => {
-        if (row.year === null || row.year === undefined) return;
+      if (diff >= stableTh) {
+        groups.stable.push(item);
+      } else if (diff >= moderateTh) {
+        groups.moderate.push(item);
+      } else if (diff >= challengeTh) {
+        groups.challenge.push(item);
+      }
+    });
 
-        const yearKey = String(row.year);
-        const existing = latestByYear.get(yearKey);
+    groups.stable.sort((a, b) => a.diff - b.diff);
+    groups.moderate.sort((a, b) => a.diff - b.diff);
+    groups.challenge.sort((a, b) => a.diff - b.diff);
 
-        if (!existing) {
-          latestByYear.set(yearKey, row);
-          return;
-        }
+    setRecResult(groups);
+  }
 
-        const existingTime = existing.updated_at
-          ? new Date(existing.updated_at).getTime()
-          : 0;
-        const rowTime = row.updated_at
-          ? new Date(row.updated_at).getTime()
-          : 0;
+  function renderResultItem(r) {
+    return (
+      <div className="result-item" key={r.id}>
+        <div>
+          <a href={`/detail/${r.id}`}>
+            {r.departments?.schools?.school_name}
+          </a>
+          {' - '}
+          {r.departments?.department_name || '학과정보 없음'}
 
-        if (rowTime >= existingTime) {
-          latestByYear.set(yearKey, row);
-        }
-      });
+          {r.is_below_cutoff ? (
+            <>
+              {' '}
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  color: 'white',
+                  background: '#6b7280'
+                }}
+              >
+                미달
+              </span>
 
-      const sortedHistory = Array.from(
-        latestByYear.values()
-      ).sort((a, b) => Number(a.year) - Number(b.year));
+              <div style={{ fontSize: 12, color: '#888' }}>
+                🏠 기숙사 {r.dormitory || '정보없음'}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: '#888' }}>
+              합격선 {r.percentage_cut}% (여유 {r.diff.toFixed(1)}p)
+              {' · '}
+              🏠 기숙사 {r.dormitory || '정보없음'}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-      setHistory(sortedHistory);
-    } catch (err) {
-      console.error('상세정보 조회 오류:', err);
-      setData(null);
-      setHistory([]);
-    } finally {
-      setLoading(false);
+  function startEdit(r) {
+    if (r.hasCutData === false) return;
+
+    const cutoffMode = r.is_below_cutoff
+      ? 'below'
+      : r.is_estimated
+        ? 'estimated'
+        : 'exact';
+
+    setEditingId(r.id);
+
+    setEditForm({
+      department_name:
+        r.departments?.department_name === '학과정보 없음'
+          ? ''
+          : r.departments?.department_name || '',
+      department_id: r.departments?.id,
+      school_id: r.departments?.schools?.id,
+      school_type:
+        r.departments?.schools?.school_type || '전기고',
+      year: r.year,
+      cutoff_mode: cutoffMode,
+      percentage_cut: r.percentage_cut ?? '',
+      graph_value:
+        r.graph_value ?? r.percentage_cut ?? '',
+      cutoff_text:
+        r.cutoff_text ||
+        (r.percentage_cut != null
+          ? `${r.percentage_cut}%`
+          : ''),
+      is_estimated: r.is_estimated || false,
+      is_below_cutoff: r.is_below_cutoff || false,
+      dormitory: r.dormitory || '없음',
+      feature: r.feature || ''
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(null);
+  }
+
+  function updateEditForm(key, value) {
+    setEditForm(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  }
+
+  function handleCutoffModeChange(mode) {
+    setEditForm(prev => {
+      if (mode === 'below') {
+        return {
+          ...prev,
+          cutoff_mode: 'below',
+          percentage_cut: '',
+          graph_value: '',
+          cutoff_text: '미달',
+          is_estimated: false,
+          is_below_cutoff: true
+        };
+      }
+
+      if (mode === 'estimated') {
+        const inferred = inferGraphValueFromCutoffText(
+          prev.cutoff_text
+        );
+
+        return {
+          ...prev,
+          cutoff_mode: 'estimated',
+          percentage_cut: '',
+          graph_value:
+            inferred ?? prev.graph_value ?? '',
+          cutoff_text:
+            prev.cutoff_text === '미달'
+              ? ''
+              : prev.cutoff_text,
+          is_estimated: true,
+          is_below_cutoff: false
+        };
+      }
+
+      const exactValue = prev.percentage_cut || '';
+
+      return {
+        ...prev,
+        cutoff_mode: 'exact',
+        graph_value: exactValue,
+        cutoff_text: exactValue
+          ? `${exactValue}%`
+          : '',
+        is_estimated: false,
+        is_below_cutoff: false
+      };
+    });
+  }
+
+  function handleEstimatedTextChange(value) {
+    const inferred = inferGraphValueFromCutoffText(value);
+
+    setEditForm(prev => ({
+      ...prev,
+      cutoff_text: value,
+      graph_value:
+        inferred !== null
+          ? inferred
+          : prev.graph_value
+    }));
+  }
+
+  async function saveEdit(r) {
+    const mode = editForm.cutoff_mode || 'exact';
+
+    let newValue = null;
+    let graphValue = null;
+    let cutoffText = null;
+    let isEstimated = false;
+    let isBelowCutoff = false;
+
+    if (mode === 'exact') {
+      if (editForm.percentage_cut === '') {
+        alert('정확한 합격선 숫자를 입력해주세요.');
+        return;
+      }
+
+      newValue = Number(editForm.percentage_cut);
+
+      if (
+        !Number.isFinite(newValue) ||
+        newValue < 0 ||
+        newValue > 100
+      ) {
+        alert('합격선은 0~100 사이 숫자로 입력해주세요.');
+        return;
+      }
+
+      graphValue = newValue;
+      cutoffText = `${newValue}%`;
+    } else if (mode === 'estimated') {
+      cutoffText = editForm.cutoff_text?.trim();
+
+      if (!cutoffText) {
+        alert('예: 70~80%, 90% 초반대처럼 표시 문구를 입력해주세요.');
+        return;
+      }
+
+      const inferred = inferGraphValueFromCutoffText(
+        cutoffText
+      );
+
+      graphValue =
+        editForm.graph_value === '' ||
+        editForm.graph_value === null ||
+        editForm.graph_value === undefined
+          ? inferred
+          : Number(editForm.graph_value);
+
+      if (
+        graphValue === null ||
+        !Number.isFinite(graphValue) ||
+        graphValue < 0 ||
+        graphValue > 100
+      ) {
+        alert('그래프 대표값을 0~100 사이 숫자로 입력해주세요.');
+        return;
+      }
+
+      newValue = null;
+      isEstimated = true;
+    } else {
+      newValue = null;
+      graphValue = null;
+      cutoffText = '미달';
+      isBelowCutoff = true;
     }
-  }
 
-  function startEditFeature() {
-    setFeatureValue(data.feature || '');
-    setEditingFeature(true);
-  }
-
-  function cancelEditFeature() {
-    setEditingFeature(false);
-  }
-
-  async function saveFeature() {
-    setSaving(true);
+    setEditSaving(true);
 
     try {
+      const deptName =
+        editForm.department_name.trim() || '학과정보 없음';
+
+      if (
+        editForm.department_id &&
+        deptName !== r.departments?.department_name
+      ) {
+        const { error: departmentError } = await supabase
+          .from('departments')
+          .update({
+            department_name: deptName
+          })
+          .eq('id', editForm.department_id);
+
+        if (departmentError) {
+          throw departmentError;
+        }
+      }
+
+      if (
+        editForm.school_id &&
+        editForm.school_type !==
+          r.departments?.schools?.school_type
+      ) {
+        const { error: schoolError } = await supabase
+          .from('schools')
+          .update({
+            school_type: editForm.school_type
+          })
+          .eq('id', editForm.school_id);
+
+        if (schoolError) {
+          throw schoolError;
+        }
+      }
+
+      const { data: settingsData } = await supabase
+        .from('site_settings')
+        .select('approval_mode')
+        .eq('id', 1)
+        .single();
+
+      const approvalMode =
+        settingsData?.approval_mode ?? false;
+
       const { error } = await supabase
         .from('school_cuts')
         .update({
-          feature: featureValue,
+          year: editForm.year,
+          percentage_cut: newValue,
+          graph_value: graphValue,
+          cutoff_text: cutoffText,
+          is_estimated: isEstimated,
+          is_below_cutoff: isBelowCutoff,
+          dormitory: editForm.dormitory,
+          feature: editForm.feature,
+          status: approvalMode ? 'pending' : 'approved',
           updated_at: new Date().toISOString()
         })
-        .eq('id', id);
+        .eq('id', r.id);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
-      setEditingFeature(false);
-      await fetchDetail();
+      if (r.percentage_cut !== newValue) {
+        const { error: historyError } = await supabase
+          .from('edit_history')
+          .insert({
+            cut_id: r.id,
+            old_value: r.percentage_cut,
+            new_value: newValue
+          });
+
+        if (historyError) {
+          console.error(
+            '수정 기록 저장 오류:',
+            historyError
+          );
+        }
+      }
+
+      setEditingId(null);
+      setEditForm(null);
+
+      await fetchList();
     } catch (err) {
-      alert('저장 중 오류가 발생했습니다: ' + err.message);
+      alert(
+        '수정 중 오류가 발생했습니다: ' + err.message
+      );
     } finally {
-      setSaving(false);
+      setEditSaving(false);
     }
   }
 
-  if (loading) {
-    return <div className="card">불러오는 중...</div>;
-  }
-
-  if (!data) {
-    return <div className="card">데이터를 찾을 수 없어요.</div>;
-  }
-
-  const s = data.departments?.schools;
+  const canEdit = siteSettings
+    ? siteSettings.allow_public_edit !== false
+    : true;
 
   return (
-    <div className="card">
-      <h2>
-        {s?.school_name} -{' '}
-        {data.departments?.department_name || '학과정보 없음'}
-      </h2>
+    <div>
+      <div className="tabs">
+        <button
+          className={tab === 'recommend' ? 'active' : ''}
+          onClick={() => setTab('recommend')}
+        >
+          내 성적으로 추천받기
+        </button>
 
-      <CutoffHistoryChart history={history} />
-
-      <table>
-        <tbody>
-          <tr>
-            <th style={{ width: 120 }}>지역</th>
-            <td>{s?.region}</td>
-          </tr>
-          <tr>
-            <th>전기/후기</th>
-            <td>{s?.school_type}</td>
-          </tr>
-          <tr>
-            <th>학과</th>
-            <td>
-              {data.departments?.department_name || '학과정보 없음'}
-            </td>
-          </tr>
-          <tr>
-            <th>기준년도</th>
-            <td>{data.year}</td>
-          </tr>
-          <tr>
-            <th>합격선</th>
-            <td>
-              {getCutoffDisplayText(data)}
-              {data.is_estimated && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    fontSize: 12,
-                    color: '#888'
-                  }}
-                >
-                  (참고 범위)
-                </span>
-              )}
-            </td>
-          </tr>
-          <tr>
-            <th>기숙사</th>
-            <td>{data.dormitory || '-'}</td>
-          </tr>
-          <tr>
-            <th>기타 특징</th>
-            <td>
-              {editingFeature ? (
-                <div>
-                  <textarea
-                    value={featureValue}
-                    onChange={e => setFeatureValue(e.target.value)}
-                    rows={4}
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <div style={{ marginTop: 8 }}>
-                    <button
-                      onClick={saveFeature}
-                      disabled={saving}
-                      style={{ marginRight: 8 }}
-                    >
-                      {saving ? '저장중...' : '저장'}
-                    </button>
-                    <button
-                      className="secondary"
-                      onClick={cancelEditFeature}
-                    >
-                      취소
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      marginBottom: 8
-                    }}
-                  >
-                    {data.feature || '등록된 특징이 없어요.'}
-                  </div>
-                  <button
-                    className="secondary"
-                    onClick={startEditFeature}
-                  >
-                    특징 수정
-                  </button>
-                </div>
-              )}
-            </td>
-          </tr>
-          <tr>
-            <th>최종수정</th>
-            <td>
-              {data.updated_at
-                ? new Date(data.updated_at).toLocaleString('ko-KR')
-                : '-'}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div style={{ marginTop: 16 }}>
-        <a href="/">← 목록으로 돌아가기</a>
+        <button
+          className={tab === 'list' ? 'active' : ''}
+          onClick={() => setTab('list')}
+        >
+          전체 목록
+        </button>
       </div>
+
+      {tab === 'recommend' && (
+        <div>
+          <div className="card">
+            <h2>내 성적으로 학교 추천받기 ({CURRENT_YEAR}년 기준)</h2>
+
+            <div className="form-row">
+              <div>
+                <label>내 백분율 성적 (%)</label>
+
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={percentage}
+                  onChange={e =>
+                    setPercentage(e.target.value)
+                  }
+                  placeholder="예: 55"
+                />
+              </div>
+
+              <div>
+                <label>구분</label>
+
+                <select
+                  value={recType}
+                  onChange={e =>
+                    setRecType(e.target.value)
+                  }
+                >
+                  <option value="">전체</option>
+                  <option value="전기고">전기고</option>
+                  <option value="후기고">후기고</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={handleRecommend}
+              disabled={loading}
+            >
+              {loading
+                ? '조회중...'
+                : '추천 결과 보기'}
+            </button>
+          </div>
+
+          {recResult && (
+            <div>
+              <div className="result-group">
+                <h3>
+                  <span className="badge stable">
+                    안정권
+                  </span>
+                </h3>
+
+                {recResult.stable.length === 0 && (
+                  <p style={{ color: '#999' }}>
+                    해당하는 학교가 없어요.
+                  </p>
+                )}
+
+                {recResult.stable.map(r =>
+                  renderResultItem(r)
+                )}
+              </div>
+
+              <div className="result-group">
+                <h3>
+                  <span className="badge moderate">
+                    적정권
+                  </span>
+                </h3>
+
+                {recResult.moderate.length === 0 && (
+                  <p style={{ color: '#999' }}>
+                    해당하는 학교가 없어요.
+                  </p>
+                )}
+
+                {recResult.moderate.map(r =>
+                  renderResultItem(r)
+                )}
+              </div>
+
+              <div className="result-group">
+                <h3>
+                  <span className="badge challenge">
+                    도전권
+                  </span>
+                </h3>
+
+                {recResult.challenge.length === 0 && (
+                  <p style={{ color: '#999' }}>
+                    해당하는 학교가 없어요.
+                  </p>
+                )}
+
+                {recResult.challenge.map(r =>
+                  renderResultItem(r)
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'list' && (
+        <div className="card">
+          <h2>전체 목록 ({CURRENT_YEAR}년 기준)</h2>
+
+          <div className="form-row">
+            <div>
+              <label>
+                <strong>학교 검색</strong>
+              </label>
+
+              <input
+                list="school-search-list"
+                value={listSchool}
+                onChange={e =>
+                  setListSchool(e.target.value)
+                }
+                placeholder="학교명을 입력하세요 (예: 전주)"
+              />
+
+              <datalist id="school-search-list">
+                {schools.map(s => (
+                  <option
+                    key={s.id}
+                    value={s.school_name}
+                  />
+                ))}
+              </datalist>
+            </div>
+
+            <div>
+              <label>지역</label>
+
+              <select
+                value={listRegion}
+                onChange={e =>
+                  setListRegion(e.target.value)
+                }
+              >
+                <option value="">전체</option>
+
+                {REGIONS.map(r => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>전기/후기</label>
+
+              <select
+                value={listType}
+                onChange={e =>
+                  setListType(e.target.value)
+                }
+              >
+                <option value="">전체</option>
+                <option value="전기고">전기고</option>
+                <option value="후기고">후기고</option>
+              </select>
+            </div>
+          </div>
+
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 10,
+              marginBottom: 14,
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={onlyWithData}
+              onChange={e =>
+                setOnlyWithData(e.target.checked)
+              }
+              style={{
+                width: 18,
+                height: 18,
+                margin: 0,
+                cursor: 'pointer'
+              }}
+            />
+            <span>
+              자료가 입력된 학교만 보기
+            </span>
+          </label>
+
+          {listLoading ? (
+            <p
+              style={{
+                textAlign: 'center',
+                color: '#999',
+                padding: 20
+              }}
+            >
+              학교 목록을 불러오는 중입니다...
+            </p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: '8%' }}>지역</th>
+                  <th style={{ width: '14%' }}>학교</th>
+                  <th style={{ width: '8%' }}>구분</th>
+                  <th style={{ width: '14%' }}>학과</th>
+                  <th style={{ width: '7%' }}>연도</th>
+                  <th style={{ width: '10%' }}>합격선</th>
+                  <th style={{ width: '8%' }}>기숙사</th>
+                  <th style={{ width: '10%' }}>
+                    최종수정
+                  </th>
+
+                  {canEdit && (
+                    <th style={{ width: '10%' }}>
+                      관리
+                    </th>
+                  )}
+                </tr>
+              </thead>
+
+              <tbody>
+                {listData.map(r => {
+                  const s =
+                    r.departments?.schools;
+
+                  const hasCutData =
+                    r.hasCutData !== false;
+
+                  const isEditing =
+                    hasCutData &&
+                    editingId === r.id;
+
+                  if (isEditing) {
+                    return (
+                      <tr key={r.rowKey || r.id}>
+                        <td>
+                          {s?.region ||
+                            '정보 없음'}
+                        </td>
+
+                        <td>
+                          {s?.school_name ||
+                            '정보 없음'}
+                        </td>
+
+                        <td>
+                          <select
+                            value={
+                              editForm.school_type
+                            }
+                            onChange={e =>
+                              updateEditForm(
+                                'school_type',
+                                e.target.value
+                              )
+                            }
+                          >
+                            <option value="전기고">
+                              전기고
+                            </option>
+                            <option value="후기고">
+                              후기고
+                            </option>
+                          </select>
+                        </td>
+
+                        <td>
+                          <input
+                            value={
+                              editForm.department_name
+                            }
+                            onChange={e =>
+                              updateEditForm(
+                                'department_name',
+                                e.target.value
+                              )
+                            }
+                            placeholder="학과정보 없음"
+                            style={{
+                              minWidth: 100
+                            }}
+                          />
+                        </td>
+
+                        <td>
+                          <input
+                            type="number"
+                            value={editForm.year}
+                            onChange={e =>
+                              updateEditForm(
+                                'year',
+                                e.target.value
+                              )
+                            }
+                            style={{
+                              width: 70
+                            }}
+                          />
+                        </td>
+
+                        <td>
+                          <select
+                            value={
+                              editForm.cutoff_mode || 'exact'
+                            }
+                            onChange={e =>
+                              handleCutoffModeChange(
+                                e.target.value
+                              )
+                            }
+                            style={{
+                              width: '100%',
+                              marginBottom: 6
+                            }}
+                          >
+                            <option value="exact">
+                              정확한 값
+                            </option>
+                            <option value="estimated">
+                              범위/대략값
+                            </option>
+                            <option value="below">
+                              미달
+                            </option>
+                          </select>
+
+                          {editForm.cutoff_mode ===
+                          'estimated' ? (
+                            <div>
+                              <input
+                                type="text"
+                                value={
+                                  editForm.cutoff_text || ''
+                                }
+                                onChange={e =>
+                                  handleEstimatedTextChange(
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="예: 70~80%, 90% 초반대"
+                                style={{
+                                  width: 150,
+                                  marginBottom: 4
+                                }}
+                              />
+
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: '#777'
+                                }}
+                              >
+                                그래프 대표값
+                              </div>
+
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                value={
+                                  editForm.graph_value ?? ''
+                                }
+                                onChange={e =>
+                                  updateEditForm(
+                                    'graph_value',
+                                    e.target.value
+                                  )
+                                }
+                                style={{
+                                  width: 70
+                                }}
+                              />
+                            </div>
+                          ) : editForm.cutoff_mode ===
+                            'below' ? (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: '#666'
+                              }}
+                            >
+                              미달로 표시됩니다.
+                            </span>
+                          ) : (
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              value={
+                                editForm.percentage_cut
+                              }
+                              onChange={e => {
+                                const value = e.target.value;
+
+                                setEditForm(prev => ({
+                                  ...prev,
+                                  percentage_cut: value,
+                                  graph_value: value,
+                                  cutoff_text: value
+                                    ? `${value}%`
+                                    : ''
+                                }));
+                              }}
+                              style={{
+                                width: 70
+                              }}
+                            />
+                          )}
+                        </td>
+
+                        <td>
+                          <select
+                            value={
+                              editForm.dormitory
+                            }
+                            onChange={e =>
+                              updateEditForm(
+                                'dormitory',
+                                e.target.value
+                              )
+                            }
+                          >
+                            <option value="있음">
+                              있음
+                            </option>
+                            <option value="없음">
+                              없음
+                            </option>
+                          </select>
+                        </td>
+
+                        <td
+                          style={{
+                            fontSize: 12
+                          }}
+                        >
+                          {r.updated_at
+                            ? new Date(
+                                r.updated_at
+                              ).toLocaleString(
+                                'ko-KR'
+                              )
+                            : '정보 없음'}
+                        </td>
+
+                        <td>
+                          <button
+                            onClick={() =>
+                              saveEdit(r)
+                            }
+                            disabled={editSaving}
+                            style={{
+                              marginRight: 4
+                            }}
+                          >
+                            {editSaving
+                              ? '저장중...'
+                              : '저장'}
+                          </button>
+
+                          <button
+                            className="secondary"
+                            onClick={cancelEdit}
+                          >
+                            취소
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={r.rowKey || r.id}>
+                      <td>
+                        {s?.region || '정보 없음'}
+                      </td>
+
+                      <td>
+                        {r.detailId ? (
+                          <a
+                            href={`/detail/${r.detailId}`}
+                          >
+                            {s?.school_name ||
+                              '정보 없음'}
+                          </a>
+                        ) : (
+                          s?.school_name ||
+                          '정보 없음'
+                        )}
+                      </td>
+
+                      <td>
+                        {s?.school_type ||
+                          '정보 없음'}
+                      </td>
+
+                      <td>
+                        {hasCutData
+                          ? r.departments
+                              ?.department_name ||
+                            '정보 없음'
+                          : '정보 없음'}
+                      </td>
+
+                      <td>
+                        {hasCutData && r.year
+                          ? r.year
+                          : '정보 없음'}
+                      </td>
+
+                      <td>
+                        {!hasCutData
+                          ? '정보 없음'
+                          : getCutoffDisplayText(r)}
+
+                        {hasCutData &&
+                          r.is_estimated && (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: '#888',
+                                marginTop: 2
+                              }}
+                            >
+                              참고 범위
+                            </div>
+                          )}
+                      </td>
+
+                      <td>
+                        {hasCutData
+                          ? r.dormitory ||
+                            '정보 없음'
+                          : '정보 없음'}
+                      </td>
+
+                      <td
+                        style={{
+                          fontSize: 12,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {hasCutData &&
+                        r.updated_at
+                          ? formatYearMonth(
+                              r.updated_at
+                            )
+                          : '정보 없음'}
+                      </td>
+
+                      {canEdit && (
+                        <td>
+                          {hasCutData ? (
+                            <button
+                              className="secondary"
+                              onClick={() =>
+                                startEdit(r)
+                              }
+                            >
+                              수정
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                color: '#999'
+                              }}
+                            >
+                              -
+                            </span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+
+                {listData.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={canEdit ? 9 : 8}
+                      style={{
+                        textAlign: 'center',
+                        color: '#999'
+                      }}
+                    >
+                      검색 조건에 맞는 학교가
+                      없어요.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+
+          <p
+            style={{
+              fontSize: 12,
+              color: '#999',
+              marginTop: 8
+            }}
+          >
+            💡 합격선 정보가 없는 학교는 ‘정보
+            없음’으로 표시됩니다. 정보가 있는 학교는
+            학교명을 클릭하면 상세페이지에서 확인할 수
+            있어요.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
