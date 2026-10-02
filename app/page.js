@@ -32,6 +32,84 @@ function formatYearMonth(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+
+function getCutoffDisplayText(row) {
+  if (!row) return '정보 없음';
+  if (row.is_below_cutoff) return '미달';
+
+  const text = row.cutoff_text?.trim();
+  if (text) return text;
+
+  if (row.percentage_cut !== null && row.percentage_cut !== undefined) {
+    return `${row.percentage_cut}%`;
+  }
+
+  return '정보 없음';
+}
+
+function inferGraphValueFromCutoffText(rawText) {
+  const text = String(rawText || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  if (!text) return null;
+
+  // 예: 70~80%, 70~80%대, 70 ~ 80
+  const rangeMatch = text.match(
+    /(\d+(?:\.\d+)?)\s*~\s*(\d+(?:\.\d+)?)\s*%?/
+  );
+
+  if (rangeMatch) {
+    const min = Number(rangeMatch[1]);
+    const max = Number(rangeMatch[2]);
+
+    if (
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      min >= 0 &&
+      max <= 100 &&
+      min <= max
+    ) {
+      return Number(((min + max) / 2).toFixed(1));
+    }
+  }
+
+  // 예: 90% 초반대 / 80% 중반 / 70% 후반대
+  const bandMatch = text.match(
+    /(\d+(?:\.\d+)?)\s*%\s*(초반대?|중반대?|후반대?)/
+  );
+
+  if (bandMatch) {
+    const base = Number(bandMatch[1]);
+    const band = bandMatch[2];
+    const add = band.startsWith('초반')
+      ? 2
+      : band.startsWith('중반')
+        ? 5
+        : 7;
+
+    const value = base + add;
+
+    if (Number.isFinite(value)) {
+      return Math.min(100, value);
+    }
+  }
+
+  // 예: 90%대 -> 대표값 92
+  const decadeMatch = text.match(/(\d+(?:\.\d+)?)\s*%대/);
+
+  if (decadeMatch) {
+    const base = Number(decadeMatch[1]);
+    const value = base + 2;
+
+    if (Number.isFinite(value)) {
+      return Math.min(100, value);
+    }
+  }
+
+  return null;
+}
+
 export default function Home() {
   const [tab, setTab] = useState('recommend');
 
@@ -203,6 +281,9 @@ export default function Home() {
           hasCutData: false,
           year: null,
           percentage_cut: null,
+          graph_value: null,
+          cutoff_text: null,
+          is_estimated: false,
           is_below_cutoff: false,
           dormitory: null,
           feature: null,
@@ -353,6 +434,12 @@ export default function Home() {
   function startEdit(r) {
     if (r.hasCutData === false) return;
 
+    const cutoffMode = r.is_below_cutoff
+      ? 'below'
+      : r.is_estimated
+        ? 'estimated'
+        : 'exact';
+
     setEditingId(r.id);
 
     setEditForm({
@@ -365,7 +452,16 @@ export default function Home() {
       school_type:
         r.departments?.schools?.school_type || '전기고',
       year: r.year,
+      cutoff_mode: cutoffMode,
       percentage_cut: r.percentage_cut ?? '',
+      graph_value:
+        r.graph_value ?? r.percentage_cut ?? '',
+      cutoff_text:
+        r.cutoff_text ||
+        (r.percentage_cut != null
+          ? `${r.percentage_cut}%`
+          : ''),
+      is_estimated: r.is_estimated || false,
       is_below_cutoff: r.is_below_cutoff || false,
       dormitory: r.dormitory || '없음',
       feature: r.feature || ''
@@ -384,18 +480,132 @@ export default function Home() {
     }));
   }
 
-  function handleEditBelowCutoff(checked) {
+  function handleCutoffModeChange(mode) {
+    setEditForm(prev => {
+      if (mode === 'below') {
+        return {
+          ...prev,
+          cutoff_mode: 'below',
+          percentage_cut: '',
+          graph_value: '',
+          cutoff_text: '미달',
+          is_estimated: false,
+          is_below_cutoff: true
+        };
+      }
+
+      if (mode === 'estimated') {
+        const inferred = inferGraphValueFromCutoffText(
+          prev.cutoff_text
+        );
+
+        return {
+          ...prev,
+          cutoff_mode: 'estimated',
+          percentage_cut: '',
+          graph_value:
+            inferred ?? prev.graph_value ?? '',
+          cutoff_text:
+            prev.cutoff_text === '미달'
+              ? ''
+              : prev.cutoff_text,
+          is_estimated: true,
+          is_below_cutoff: false
+        };
+      }
+
+      const exactValue = prev.percentage_cut || '';
+
+      return {
+        ...prev,
+        cutoff_mode: 'exact',
+        graph_value: exactValue,
+        cutoff_text: exactValue
+          ? `${exactValue}%`
+          : '',
+        is_estimated: false,
+        is_below_cutoff: false
+      };
+    });
+  }
+
+  function handleEstimatedTextChange(value) {
+    const inferred = inferGraphValueFromCutoffText(value);
+
     setEditForm(prev => ({
       ...prev,
-      is_below_cutoff: checked,
-      percentage_cut: checked ? '' : prev.percentage_cut
+      cutoff_text: value,
+      graph_value:
+        inferred !== null
+          ? inferred
+          : prev.graph_value
     }));
   }
 
   async function saveEdit(r) {
-    if (!editForm.is_below_cutoff && !editForm.percentage_cut) {
-      alert('합격선을 입력하거나 "미달"에 체크해주세요.');
-      return;
+    const mode = editForm.cutoff_mode || 'exact';
+
+    let newValue = null;
+    let graphValue = null;
+    let cutoffText = null;
+    let isEstimated = false;
+    let isBelowCutoff = false;
+
+    if (mode === 'exact') {
+      if (editForm.percentage_cut === '') {
+        alert('정확한 합격선 숫자를 입력해주세요.');
+        return;
+      }
+
+      newValue = Number(editForm.percentage_cut);
+
+      if (
+        !Number.isFinite(newValue) ||
+        newValue < 0 ||
+        newValue > 100
+      ) {
+        alert('합격선은 0~100 사이 숫자로 입력해주세요.');
+        return;
+      }
+
+      graphValue = newValue;
+      cutoffText = `${newValue}%`;
+    } else if (mode === 'estimated') {
+      cutoffText = editForm.cutoff_text?.trim();
+
+      if (!cutoffText) {
+        alert('예: 70~80%, 90% 초반대처럼 표시 문구를 입력해주세요.');
+        return;
+      }
+
+      const inferred = inferGraphValueFromCutoffText(
+        cutoffText
+      );
+
+      graphValue =
+        editForm.graph_value === '' ||
+        editForm.graph_value === null ||
+        editForm.graph_value === undefined
+          ? inferred
+          : Number(editForm.graph_value);
+
+      if (
+        graphValue === null ||
+        !Number.isFinite(graphValue) ||
+        graphValue < 0 ||
+        graphValue > 100
+      ) {
+        alert('그래프 대표값을 0~100 사이 숫자로 입력해주세요.');
+        return;
+      }
+
+      newValue = null;
+      isEstimated = true;
+    } else {
+      newValue = null;
+      graphValue = null;
+      cutoffText = '미달';
+      isBelowCutoff = true;
     }
 
     setEditSaving(true);
@@ -446,16 +656,15 @@ export default function Home() {
       const approvalMode =
         settingsData?.approval_mode ?? false;
 
-      const newValue = editForm.is_below_cutoff
-        ? null
-        : parseFloat(editForm.percentage_cut);
-
       const { error } = await supabase
         .from('school_cuts')
         .update({
           year: editForm.year,
           percentage_cut: newValue,
-          is_below_cutoff: editForm.is_below_cutoff,
+          graph_value: graphValue,
+          cutoff_text: cutoffText,
+          is_estimated: isEstimated,
+          is_below_cutoff: isBelowCutoff,
           dormitory: editForm.dormitory,
           feature: editForm.feature,
           status: approvalMode ? 'pending' : 'approved',
@@ -805,59 +1014,115 @@ export default function Home() {
                         </td>
 
                         <td>
-                          <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="100"
+                          <select
                             value={
-                              editForm.percentage_cut
+                              editForm.cutoff_mode || 'exact'
                             }
                             onChange={e =>
-                              updateEditForm(
-                                'percentage_cut',
+                              handleCutoffModeChange(
                                 e.target.value
                               )
                             }
-                            disabled={
-                              editForm.is_below_cutoff
-                            }
                             style={{
-                              width: 70
-                            }}
-                          />
-
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              marginTop: 4
+                              width: '100%',
+                              marginBottom: 6
                             }}
                           >
-                            <input
-                              type="checkbox"
-                              checked={
-                                editForm.is_below_cutoff
-                              }
-                              onChange={e =>
-                                handleEditBelowCutoff(
-                                  e.target.checked
-                                )
-                              }
-                              style={{
-                                width: 'auto'
-                              }}
-                            />
+                            <option value="exact">
+                              정확한 값
+                            </option>
+                            <option value="estimated">
+                              범위/대략값
+                            </option>
+                            <option value="below">
+                              미달
+                            </option>
+                          </select>
 
+                          {editForm.cutoff_mode ===
+                          'estimated' ? (
+                            <div>
+                              <input
+                                type="text"
+                                value={
+                                  editForm.cutoff_text || ''
+                                }
+                                onChange={e =>
+                                  handleEstimatedTextChange(
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="예: 70~80%, 90% 초반대"
+                                style={{
+                                  width: 150,
+                                  marginBottom: 4
+                                }}
+                              />
+
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: '#777'
+                                }}
+                              >
+                                그래프 대표값
+                              </div>
+
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                value={
+                                  editForm.graph_value ?? ''
+                                }
+                                onChange={e =>
+                                  updateEditForm(
+                                    'graph_value',
+                                    e.target.value
+                                  )
+                                }
+                                style={{
+                                  width: 70
+                                }}
+                              />
+                            </div>
+                          ) : editForm.cutoff_mode ===
+                            'below' ? (
                             <span
                               style={{
-                                fontSize: 12
+                                fontSize: 12,
+                                color: '#666'
                               }}
                             >
-                              미달
+                              미달로 표시됩니다.
                             </span>
-                          </div>
+                          ) : (
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              value={
+                                editForm.percentage_cut
+                              }
+                              onChange={e => {
+                                const value = e.target.value;
+
+                                setEditForm(prev => ({
+                                  ...prev,
+                                  percentage_cut: value,
+                                  graph_value: value,
+                                  cutoff_text: value
+                                    ? `${value}%`
+                                    : ''
+                                }));
+                              }}
+                              style={{
+                                width: 70
+                              }}
+                            />
+                          )}
                         </td>
 
                         <td>
@@ -963,12 +1228,20 @@ export default function Home() {
                       <td>
                         {!hasCutData
                           ? '정보 없음'
-                          : r.is_below_cutoff
-                            ? '미달'
-                            : r.percentage_cut !=
-                                null
-                              ? `${r.percentage_cut}%`
-                              : '정보 없음'}
+                          : getCutoffDisplayText(r)}
+
+                        {hasCutData &&
+                          r.is_estimated && (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: '#888',
+                                marginTop: 2
+                              }}
+                            >
+                              참고 범위
+                            </div>
+                          )}
                       </td>
 
                       <td>
