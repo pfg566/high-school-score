@@ -1687,19 +1687,6 @@ export default function Home() {
                             )
                           : '정보 없음'}
                       </td>
-
-                      {canEdit && (
-                        <td>
-                          <button
-                            className="secondary"
-                            onClick={() =>
-                              startEdit(r)
-                            }
-                          >
-                            수정
-                          </button>
-                        </td>
-                      )}
                     </tr>
                   );
                   })
@@ -1708,7 +1695,7 @@ export default function Home() {
                 {listData.length === 0 && (
                   <tr>
                     <td
-                      colSpan={canEdit ? 9 : 8}
+                      colSpan={8}
                       style={{
                         textAlign: 'center',
                         color: '#999'
