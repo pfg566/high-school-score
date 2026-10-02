@@ -1064,7 +1064,7 @@ export default function Home() {
       {tab === 'recommend' && (
         <div>
           <div className="card">
-            <h2>내 성적으로 학교 추천받기 ({CURRENT_YEAR}년 기준)</h2>
+            <h2>내 성적으로 학교 추천받기</h2>
 
             <div className="form-row">
               <div>
@@ -1171,7 +1171,7 @@ export default function Home() {
 
       {tab === 'list' && (
         <div className="card">
-          <h2>전체 목록 ({CURRENT_YEAR}년 기준)</h2>
+          <h2>전체 목록</h2>
 
           <div className="form-row">
             <div>
