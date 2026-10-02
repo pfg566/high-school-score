@@ -364,7 +364,8 @@ export default function Home() {
           )
         )
       `)
-      .eq('status', 'approved');
+      .eq('status', 'approved')
+      .eq('year', CURRENT_YEAR);
 
     setLoading(false);
 
@@ -772,7 +773,7 @@ export default function Home() {
       {tab === 'recommend' && (
         <div>
           <div className="card">
-            <h2>내 성적으로 학교 추천받기</h2>
+            <h2>내 성적으로 학교 추천받기 ({CURRENT_YEAR}년 기준)</h2>
 
             <div className="form-row">
               <div>
