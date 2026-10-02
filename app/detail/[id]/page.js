@@ -3,6 +3,20 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 
+function getCutoffDisplayText(row) {
+  if (!row) return '-';
+  if (row.is_below_cutoff) return '미달';
+
+  const text = row.cutoff_text?.trim();
+  if (text) return text;
+
+  if (row.percentage_cut !== null && row.percentage_cut !== undefined) {
+    return `${row.percentage_cut}%`;
+  }
+
+  return '-';
+}
+
 function CutoffHistoryChart({ history }) {
   const chartData = history.filter(row => row.year != null);
 
@@ -11,6 +25,7 @@ function CutoffHistoryChart({ history }) {
       <div
         style={{
           marginTop: 20,
+          marginBottom: 24,
           padding: 20,
           border: '1px solid #e5e7eb',
           borderRadius: 12,
@@ -23,21 +38,17 @@ function CutoffHistoryChart({ history }) {
     );
   }
 
-  const width = 720;
-  const height = 320;
-
+  const width = Math.max(720, chartData.length * 150);
+  const height = 360;
   const padding = {
     top: 35,
-    right: 30,
-    bottom: 55,
-    left: 55
+    right: 35,
+    bottom: 65,
+    left: 58
   };
 
-  const graphWidth =
-    width - padding.left - padding.right;
-
-  const graphHeight =
-    height - padding.top - padding.bottom;
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
 
   const getX = index => {
     if (chartData.length === 1) {
@@ -50,41 +61,45 @@ function CutoffHistoryChart({ history }) {
     );
   };
 
-  const getY = value => {
-    return (
-      padding.top +
-      ((100 - value) / 100) * graphHeight
-    );
-  };
+  const getY = value =>
+    padding.top + ((100 - value) / 100) * graphHeight;
 
   const points = chartData.map((row, index) => {
-    const hasValue =
+    const rawGraphValue =
+      row.graph_value ?? row.percentage_cut ?? null;
+
+    const graphValue =
+      rawGraphValue === null || rawGraphValue === undefined
+        ? null
+        : Number(rawGraphValue);
+
+    const hasGraphValue =
       !row.is_below_cutoff &&
-      row.percentage_cut !== null &&
-      row.percentage_cut !== undefined;
+      Number.isFinite(graphValue) &&
+      graphValue >= 0 &&
+      graphValue <= 100;
 
     return {
       ...row,
       x: getX(index),
-      y: hasValue
-        ? getY(Number(row.percentage_cut))
-        : null,
-      hasValue
+      graphValue,
+      y: hasGraphValue ? getY(graphValue) : null,
+      hasGraphValue,
+      displayText: getCutoffDisplayText(row)
     };
   });
 
-  // 미달 데이터가 있으면 선을 끊어서 표시
   const lineSegments = [];
   let currentSegment = [];
 
   points.forEach(point => {
-    if (point.hasValue) {
+    if (point.hasGraphValue) {
       currentSegment.push(point);
-    } else {
-      if (currentSegment.length > 0) {
-        lineSegments.push(currentSegment);
-      }
+      return;
+    }
 
+    if (currentSegment.length > 0) {
+      lineSegments.push(currentSegment);
       currentSegment = [];
     }
   });
@@ -102,15 +117,11 @@ function CutoffHistoryChart({ history }) {
         marginBottom: 24,
         border: '1px solid #e5e7eb',
         borderRadius: 12,
-        padding: 16,
-        overflow: 'hidden'
+        padding: 16
       }}
     >
       <div style={{ marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>
-          연도별 백분율 합격선
-        </h3>
-
+        <h3 style={{ margin: 0 }}>연도별 백분율 합격선</h3>
         <div
           style={{
             fontSize: 12,
@@ -118,7 +129,8 @@ function CutoffHistoryChart({ history }) {
             marginTop: 4
           }}
         >
-          승인된 합격선 정보를 기준으로 표시합니다.
+          Y축은 0~100%로 고정되며, 범위·초반·중반·후반 자료는
+          그래프용 대표값으로 연결됩니다.
         </div>
       </div>
 
@@ -127,13 +139,12 @@ function CutoffHistoryChart({ history }) {
           viewBox={`0 0 ${width} ${height}`}
           style={{
             width: '100%',
-            minWidth: 500,
+            minWidth: Math.min(width, 620),
             display: 'block'
           }}
           role="img"
-          aria-label="연도별 백분율 합격선 그래프"
+          aria-label="연도별 백분율 합격선 선 그래프"
         >
-          {/* 가로 기준선 + Y축 숫자 */}
           {yTicks.map(value => {
             const y = getY(value);
 
@@ -147,7 +158,6 @@ function CutoffHistoryChart({ history }) {
                   stroke="#e5e7eb"
                   strokeWidth="1"
                 />
-
                 <text
                   x={padding.left - 10}
                   y={y + 4}
@@ -161,7 +171,6 @@ function CutoffHistoryChart({ history }) {
             );
           })}
 
-          {/* Y축 */}
           <line
             x1={padding.left}
             x2={padding.left}
@@ -169,8 +178,6 @@ function CutoffHistoryChart({ history }) {
             y2={padding.top + graphHeight}
             stroke="#999"
           />
-
-          {/* X축 */}
           <line
             x1={padding.left}
             x2={width - padding.right}
@@ -179,7 +186,6 @@ function CutoffHistoryChart({ history }) {
             stroke="#999"
           />
 
-          {/* 합격선 */}
           {lineSegments.map((segment, index) => {
             if (segment.length < 2) return null;
 
@@ -189,7 +195,7 @@ function CutoffHistoryChart({ history }) {
 
             return (
               <polyline
-                key={index}
+                key={`segment-${index}`}
                 points={polylinePoints}
                 fill="none"
                 stroke="#2563eb"
@@ -200,63 +206,59 @@ function CutoffHistoryChart({ history }) {
             );
           })}
 
-          {/* 데이터 점 */}
           {points.map(point => {
-            if (!point.hasValue) {
+            if (!point.hasGraphValue) {
               return (
                 <g key={point.id}>
-                  <circle
-                    cx={point.x}
-                    cy={padding.top + graphHeight}
-                    r="5"
-                    fill="#999"
-                  />
-
                   <text
                     x={point.x}
-                    y={padding.top + graphHeight - 10}
+                    y={padding.top + graphHeight - 12}
                     textAnchor="middle"
                     fontSize="11"
                     fontWeight="600"
                     fill="#666"
                   >
-                    미달
+                    {point.is_below_cutoff ? '미달' : point.displayText}
                   </text>
                 </g>
               );
             }
+
+            const labelY = Math.min(
+              point.y + 20,
+              padding.top + graphHeight - 8
+            );
 
             return (
               <g key={point.id}>
                 <circle
                   cx={point.x}
                   cy={point.y}
-                  r="5"
-                  fill="#2563eb"
-                  stroke="white"
-                  strokeWidth="2"
+                  r="6"
+                  fill={point.is_estimated ? 'white' : '#2563eb'}
+                  stroke="#2563eb"
+                  strokeWidth={point.is_estimated ? '3' : '2'}
                 />
 
                 <text
                   x={point.x}
-                  y={point.y - 12}
+                  y={labelY}
                   textAnchor="middle"
                   fontSize="11"
                   fontWeight="600"
                   fill="#333"
                 >
-                  {point.percentage_cut}%
+                  {point.displayText}
                 </text>
               </g>
             );
           })}
 
-          {/* 연도 */}
           {points.map(point => (
             <text
               key={`year-${point.id}`}
               x={point.x}
-              y={height - 20}
+              y={height - 22}
               textAnchor="middle"
               fontSize="12"
               fill="#555"
@@ -265,14 +267,13 @@ function CutoffHistoryChart({ history }) {
             </text>
           ))}
 
-          {/* Y축 제목 */}
           <text
-            x="14"
+            x="16"
             y={padding.top + graphHeight / 2}
             fontSize="11"
             fill="#777"
             textAnchor="middle"
-            transform={`rotate(-90 14 ${
+            transform={`rotate(-90 16 ${
               padding.top + graphHeight / 2
             })`}
           >
@@ -285,11 +286,16 @@ function CutoffHistoryChart({ history }) {
         style={{
           marginTop: 8,
           fontSize: 12,
-          color: '#888'
+          color: '#777',
+          lineHeight: 1.6
         }}
       >
-        ※ 미달 연도는 0%로 계산하지 않으며,
-        해당 지점에서 그래프 선이 끊어집니다.
+        <div>● 채운 점: 정확한 수치</div>
+        <div>○ 빈 점: 범위·대략 자료의 그래프용 대표값</div>
+        <div>
+          ※ 범위·대략 자료의 대표값은 그래프 표시에만 사용하며 추천 계산에는
+          사용하지 않습니다.
+        </div>
       </div>
     </div>
   );
@@ -300,15 +306,9 @@ export default function DetailPage({ params }) {
 
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
-
   const [loading, setLoading] = useState(true);
-
-  const [editingFeature, setEditingFeature] =
-    useState(false);
-
-  const [featureValue, setFeatureValue] =
-    useState('');
-
+  const [editingFeature, setEditingFeature] = useState(false);
+  const [featureValue, setFeatureValue] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -319,11 +319,6 @@ export default function DetailPage({ params }) {
     setLoading(true);
 
     try {
-      /*
-       * 먼저 현재 합격선 정보를 가져옵니다.
-       * departments.id도 같이 가져와야
-       * 같은 학과의 연도별 합격선을 찾을 수 있습니다.
-       */
       const {
         data: detailData,
         error: detailError
@@ -345,99 +340,73 @@ export default function DetailPage({ params }) {
         .eq('id', id)
         .single();
 
-      if (detailError) {
-        throw detailError;
-      }
+      if (detailError) throw detailError;
 
       setData(detailData);
       setFeatureValue(detailData?.feature || '');
 
-      const departmentId =
-        detailData?.departments?.id;
+      const departmentId = detailData?.departments?.id;
 
-      /*
-       * 같은 학과의 과거 합격선을 모두 가져옵니다.
-       */
-      if (departmentId) {
-        const {
-          data: historyRows,
-          error: historyError
-        } = await supabase
-          .from('school_cuts')
-          .select(`
-            id,
-            department_id,
-            year,
-            percentage_cut,
-            is_below_cutoff,
-            updated_at
-          `)
-          .eq('department_id', departmentId)
-          .eq('status', 'approved')
-          .order('year', { ascending: true });
+      if (!departmentId) {
+        setHistory([]);
+        return;
+      }
 
-        if (historyError) {
-          throw historyError;
+      const {
+        data: historyRows,
+        error: historyError
+      } = await supabase
+        .from('school_cuts')
+        .select(`
+          id,
+          department_id,
+          year,
+          percentage_cut,
+          graph_value,
+          cutoff_text,
+          is_estimated,
+          is_below_cutoff,
+          updated_at
+        `)
+        .eq('department_id', departmentId)
+        .eq('status', 'approved')
+        .order('year', { ascending: true });
+
+      if (historyError) throw historyError;
+
+      // 동일 학과/연도 데이터가 여러 개면 가장 최근 수정본만 표시
+      const latestByYear = new Map();
+
+      (historyRows || []).forEach(row => {
+        if (row.year === null || row.year === undefined) return;
+
+        const yearKey = String(row.year);
+        const existing = latestByYear.get(yearKey);
+
+        if (!existing) {
+          latestByYear.set(yearKey, row);
+          return;
         }
 
-        /*
-         * 같은 학과 + 같은 연도 데이터가
-         * 실수로 여러 개 존재할 경우
-         * 가장 최근에 수정된 자료 하나만 사용합니다.
-         */
-        const latestByYear = new Map();
+        const existingTime = existing.updated_at
+          ? new Date(existing.updated_at).getTime()
+          : 0;
+        const rowTime = row.updated_at
+          ? new Date(row.updated_at).getTime()
+          : 0;
 
-        (historyRows || []).forEach(row => {
-          if (row.year === null || row.year === undefined) {
-            return;
-          }
+        if (rowTime >= existingTime) {
+          latestByYear.set(yearKey, row);
+        }
+      });
 
-          const yearKey = String(row.year);
+      const sortedHistory = Array.from(
+        latestByYear.values()
+      ).sort((a, b) => Number(a.year) - Number(b.year));
 
-          const existing =
-            latestByYear.get(yearKey);
-
-          if (!existing) {
-            latestByYear.set(yearKey, row);
-            return;
-          }
-
-          const existingTime =
-            existing.updated_at
-              ? new Date(
-                  existing.updated_at
-                ).getTime()
-              : 0;
-
-          const rowTime =
-            row.updated_at
-              ? new Date(
-                  row.updated_at
-                ).getTime()
-              : 0;
-
-          if (rowTime >= existingTime) {
-            latestByYear.set(yearKey, row);
-          }
-        });
-
-        const sortedHistory = Array.from(
-          latestByYear.values()
-        ).sort(
-          (a, b) =>
-            Number(a.year) - Number(b.year)
-        );
-
-        setHistory(sortedHistory);
-      } else {
-        setHistory([]);
-      }
+      setHistory(sortedHistory);
     } catch (err) {
-      console.error(
-        '상세정보 조회 오류:',
-        err
-      );
-
+      console.error('상세정보 조회 오류:', err);
       setData(null);
       setHistory([]);
     } finally {
@@ -466,37 +435,23 @@ export default function DetailPage({ params }) {
         })
         .eq('id', id);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       setEditingFeature(false);
-
       await fetchDetail();
     } catch (err) {
-      alert(
-        '저장 중 오류가 발생했습니다: ' +
-          err.message
-      );
+      alert('저장 중 오류가 발생했습니다: ' + err.message);
     } finally {
       setSaving(false);
     }
   }
 
   if (loading) {
-    return (
-      <div className="card">
-        불러오는 중...
-      </div>
-    );
+    return <div className="card">불러오는 중...</div>;
   }
 
   if (!data) {
-    return (
-      <div className="card">
-        데이터를 찾을 수 없어요.
-      </div>
-    );
+    return <div className="card">데이터를 찾을 수 없어요.</div>;
   }
 
   const s = data.departments?.schools;
@@ -504,10 +459,8 @@ export default function DetailPage({ params }) {
   return (
     <div className="card">
       <h2>
-        {s?.school_name}
-        {' - '}
-        {data.departments?.department_name ||
-          '학과정보 없음'}
+        {s?.school_name} -{' '}
+        {data.departments?.department_name || '학과정보 없음'}
       </h2>
 
       <CutoffHistoryChart history={history} />
@@ -515,94 +468,69 @@ export default function DetailPage({ params }) {
       <table>
         <tbody>
           <tr>
-            <th style={{ width: 120 }}>
-              지역
-            </th>
-
+            <th style={{ width: 120 }}>지역</th>
             <td>{s?.region}</td>
           </tr>
-
           <tr>
             <th>전기/후기</th>
-
             <td>{s?.school_type}</td>
           </tr>
-
           <tr>
             <th>학과</th>
-
             <td>
-              {data.departments?.department_name ||
-                '학과정보 없음'}
+              {data.departments?.department_name || '학과정보 없음'}
             </td>
           </tr>
-
           <tr>
             <th>기준년도</th>
-
             <td>{data.year}</td>
           </tr>
-
           <tr>
             <th>합격선</th>
-
             <td>
-              {data.is_below_cutoff
-                ? '미달'
-                : data.percentage_cut != null
-                  ? `${data.percentage_cut}%`
-                  : '-'}
+              {getCutoffDisplayText(data)}
+              {data.is_estimated && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 12,
+                    color: '#888'
+                  }}
+                >
+                  (참고 범위)
+                </span>
+              )}
             </td>
           </tr>
-
           <tr>
             <th>기숙사</th>
-
             <td>{data.dormitory || '-'}</td>
           </tr>
-
           <tr>
             <th>기타 특징</th>
-
             <td>
               {editingFeature ? (
                 <div>
                   <textarea
                     value={featureValue}
-                    onChange={e =>
-                      setFeatureValue(
-                        e.target.value
-                      )
-                    }
+                    onChange={e => setFeatureValue(e.target.value)}
                     rows={4}
                     style={{
                       width: '100%',
                       boxSizing: 'border-box'
                     }}
                   />
-
-                  <div
-                    style={{
-                      marginTop: 8
-                    }}
-                  >
+                  <div style={{ marginTop: 8 }}>
                     <button
                       onClick={saveFeature}
                       disabled={saving}
-                      style={{
-                        marginRight: 8
-                      }}
+                      style={{ marginRight: 8 }}
                     >
-                      {saving
-                        ? '저장중...'
-                        : '저장'}
+                      {saving ? '저장중...' : '저장'}
                     </button>
-
                     <button
                       className="secondary"
-                      onClick={
-                        cancelEditFeature
-                      }
+                      onClick={cancelEditFeature}
                     >
                       취소
                     </button>
@@ -616,15 +544,11 @@ export default function DetailPage({ params }) {
                       marginBottom: 8
                     }}
                   >
-                    {data.feature ||
-                      '등록된 특징이 없어요.'}
+                    {data.feature || '등록된 특징이 없어요.'}
                   </div>
-
                   <button
                     className="secondary"
-                    onClick={
-                      startEditFeature
-                    }
+                    onClick={startEditFeature}
                   >
                     특징 수정
                   </button>
@@ -632,17 +556,11 @@ export default function DetailPage({ params }) {
               )}
             </td>
           </tr>
-
           <tr>
             <th>최종수정</th>
-
             <td>
               {data.updated_at
-                ? new Date(
-                    data.updated_at
-                  ).toLocaleString(
-                    'ko-KR'
-                  )
+                ? new Date(data.updated_at).toLocaleString('ko-KR')
                 : '-'}
             </td>
           </tr>
@@ -650,9 +568,7 @@ export default function DetailPage({ params }) {
       </table>
 
       <div style={{ marginTop: 16 }}>
-        <a href="/">
-          ← 목록으로 돌아가기
-        </a>
+        <a href="/">← 목록으로 돌아가기</a>
       </div>
     </div>
   );
