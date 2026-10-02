@@ -24,8 +24,8 @@ function CutoffHistoryChart({ history }) {
     return (
       <div
         style={{
-          marginTop: 20,
-          marginBottom: 24,
+          marginTop: 14,
+          marginBottom: 18,
           padding: 20,
           border: '1px solid #e5e7eb',
           borderRadius: 12,
@@ -38,13 +38,13 @@ function CutoffHistoryChart({ history }) {
     );
   }
 
-  const width = Math.max(720, chartData.length * 150);
-  const height = 360;
+  const width = Math.max(520, chartData.length * 110);
+  const height = 260;
   const padding = {
-    top: 35,
-    right: 35,
-    bottom: 65,
-    left: 58
+    top: 26,
+    right: 24,
+    bottom: 50,
+    left: 48
   };
 
   const graphWidth = width - padding.left - padding.right;
@@ -113,18 +113,21 @@ function CutoffHistoryChart({ history }) {
   return (
     <div
       style={{
-        marginTop: 20,
-        marginBottom: 24,
+        marginTop: 14,
+        marginBottom: 18,
         border: '1px solid #e5e7eb',
         borderRadius: 12,
-        padding: 16
+        padding: 12,
+        maxWidth: 680,
+        marginLeft: 'auto',
+        marginRight: 'auto'
       }}
     >
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 8 }}>
         <h3 style={{ margin: 0 }}>연도별 백분율 합격선</h3>
         <div
           style={{
-            fontSize: 12,
+            fontSize: 11,
             color: '#888',
             marginTop: 4
           }}
@@ -139,7 +142,7 @@ function CutoffHistoryChart({ history }) {
           viewBox={`0 0 ${width} ${height}`}
           style={{
             width: '100%',
-            minWidth: Math.min(width, 620),
+            minWidth: Math.min(width, 480),
             display: 'block'
           }}
           role="img"
@@ -199,7 +202,7 @@ function CutoffHistoryChart({ history }) {
                 points={polylinePoints}
                 fill="none"
                 stroke="#2563eb"
-                strokeWidth="3"
+                strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -234,10 +237,10 @@ function CutoffHistoryChart({ history }) {
                 <circle
                   cx={point.x}
                   cy={point.y}
-                  r="6"
+                  r="5"
                   fill={point.is_estimated ? 'white' : '#2563eb'}
                   stroke="#2563eb"
-                  strokeWidth={point.is_estimated ? '3' : '2'}
+                  strokeWidth={point.is_estimated ? '2.5' : '1.8'}
                 />
 
                 <text
@@ -260,7 +263,7 @@ function CutoffHistoryChart({ history }) {
               x={point.x}
               y={height - 22}
               textAnchor="middle"
-              fontSize="12"
+              fontSize="11"
               fill="#555"
             >
               {point.year}
@@ -285,7 +288,7 @@ function CutoffHistoryChart({ history }) {
       <div
         style={{
           marginTop: 8,
-          fontSize: 12,
+          fontSize: 11,
           color: '#777',
           lineHeight: 1.6
         }}
@@ -493,7 +496,7 @@ export default function DetailPage({ params }) {
                 <span
                   style={{
                     marginLeft: 8,
-                    fontSize: 12,
+                    fontSize: 11,
                     color: '#888'
                   }}
                 >
