@@ -389,8 +389,10 @@ export default function Home() {
       .select(`
         *,
         departments(
+          id,
           department_name,
           schools(
+            id,
             school_name,
             region,
             school_type
@@ -465,14 +467,34 @@ export default function Home() {
   }
 
   function renderResultItem(r) {
+    const school = r.departments?.schools;
+    const departmentName =
+      r.departments?.department_name || '학과정보 없음';
+
+    const hasRealDepartment =
+      departmentName &&
+      departmentName !== '학과정보 없음';
+
     return (
       <div className="result-item" key={r.id}>
         <div>
-          <a href={`/detail/${r.id}`}>
-            {r.departments?.schools?.school_name}
-          </a>
+          {school?.id ? (
+            <a href={`/school/${school.id}`}>
+              {school.school_name}
+            </a>
+          ) : (
+            school?.school_name || '정보 없음'
+          )}
+
           {' - '}
-          {r.departments?.department_name || '학과정보 없음'}
+
+          {hasRealDepartment ? (
+            <a href={`/detail/${r.id}`}>
+              {departmentName}
+            </a>
+          ) : (
+            departmentName
+          )}
 
           {r.is_below_cutoff ? (
             <>
@@ -1319,9 +1341,9 @@ export default function Home() {
                               fontWeight: 600
                             }}
                           >
-                            {group.primaryDetailId ? (
+                            {s?.id ? (
                               <a
-                                href={`/detail/${group.primaryDetailId}`}
+                                href={`/school/${s.id}`}
                               >
                                 {s?.school_name ||
                                   '정보 없음'}
@@ -1584,9 +1606,9 @@ export default function Home() {
                             fontWeight: 600
                           }}
                         >
-                          {group.primaryDetailId ? (
+                          {s?.id ? (
                             <a
-                              href={`/detail/${group.primaryDetailId}`}
+                              href={`/school/${s.id}`}
                             >
                               {s?.school_name ||
                                 '정보 없음'}
@@ -1604,18 +1626,19 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {r.detailId ? (
+                        {r.detailId &&
+                        r.departments?.department_name &&
+                        r.departments.department_name !==
+                          '학과정보 없음' ? (
                           <a
                             href={`/detail/${r.detailId}`}
                           >
-                            {r.departments
-                              ?.department_name ||
-                              '학과정보 없음'}
+                            {r.departments.department_name}
                           </a>
                         ) : (
                           r.departments
                             ?.department_name ||
-                          '정보 없음'
+                          '학과정보 없음'
                         )}
                       </td>
 
@@ -1707,7 +1730,7 @@ export default function Home() {
               marginTop: 8
             }}
           >
-            💡 같은 학교의 지역과 학교명은 한 번만 표시되고, 학과별 자료는 아래 행으로 이어집니다. 올해 자료가 없으면 가장 최근 과거 연도의 학과·합격선·기숙사를 대신 표시하며, 학과명을 클릭하면 해당 학과의 상세페이지와 연도별 그래프를 볼 수 있어요.
+            💡 학교명을 클릭하면 모든 학과의 합격선 추이를 한 번에 보는 학교 통합 상세페이지로 이동합니다. 실제 학과명이 있는 경우에는 학과명을 클릭해 해당 학과 상세페이지로 들어갈 수 있고, ‘학과정보 없음’은 별도 링크를 만들지 않습니다. 올해 자료가 없으면 가장 최근 과거 자료를 대신 표시합니다.
           </p>
         </div>
       )}
