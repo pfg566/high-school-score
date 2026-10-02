@@ -1601,7 +1601,7 @@ export default function Home() {
                       </td>
 
                       <td>
-                        {hasCutData && r.year
+                        {r.year
                           ? r.year
                           : '정보 없음'}
                       </td>
