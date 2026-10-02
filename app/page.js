@@ -317,7 +317,9 @@ export default function Home() {
             hasCutData: false,
             hasAnyHistory: !!latestCut,
             detailId: latestCut?.id || null,
-            year: null,
+            // 올해 자료가 없고 과거 자료만 있으면
+            // 가장 최근 과거 자료의 연도를 표시합니다.
+            year: latestCut?.year || null,
             percentage_cut: null,
             graph_value: null,
             cutoff_text: null,
