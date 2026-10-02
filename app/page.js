@@ -474,39 +474,81 @@ export default function Home() {
   }
 
   function startEdit(r) {
-    if (r.hasCutData === false) return;
+    const hasCutData =
+      r.hasCutData !== false;
 
-    const cutoffMode = r.is_below_cutoff
-      ? 'below'
-      : r.is_estimated
-        ? 'estimated'
-        : 'exact';
+    const cutoffMode = hasCutData
+      ? (
+          r.is_below_cutoff
+            ? 'below'
+            : r.is_estimated
+              ? 'estimated'
+              : 'exact'
+        )
+      : 'exact';
 
-    setEditingId(r.id);
+    setEditingId(
+      r.rowKey || r.id
+    );
 
     setEditForm({
       department_name:
-        r.departments?.department_name === '학과정보 없음'
-          ? ''
-          : r.departments?.department_name || '',
-      department_id: r.departments?.id,
-      school_id: r.departments?.schools?.id,
+        hasCutData &&
+        r.departments?.department_name !==
+          '학과정보 없음'
+          ? r.departments?.department_name || ''
+          : '',
+      department_id:
+        hasCutData
+          ? r.departments?.id
+          : null,
+      school_id:
+        r.departments?.schools?.id,
       school_type:
-        r.departments?.schools?.school_type || '전기고',
-      year: r.year,
+        r.departments?.schools?.school_type ||
+        '전기고',
+      year:
+        hasCutData && r.year
+          ? r.year
+          : CURRENT_YEAR,
       cutoff_mode: cutoffMode,
-      percentage_cut: r.percentage_cut ?? '',
+      percentage_cut:
+        hasCutData
+          ? r.percentage_cut ?? ''
+          : '',
       graph_value:
-        r.graph_value ?? r.percentage_cut ?? '',
+        hasCutData
+          ? r.graph_value ??
+            r.percentage_cut ??
+            ''
+          : '',
       cutoff_text:
-        r.cutoff_text ||
-        (r.percentage_cut != null
-          ? `${r.percentage_cut}%`
-          : ''),
-      is_estimated: r.is_estimated || false,
-      is_below_cutoff: r.is_below_cutoff || false,
-      dormitory: r.dormitory || '없음',
-      feature: r.feature || ''
+        hasCutData
+          ? (
+              r.cutoff_text ||
+              (
+                r.percentage_cut != null
+                  ? `${r.percentage_cut}%`
+                  : ''
+              )
+            )
+          : '',
+      is_estimated:
+        hasCutData
+          ? r.is_estimated || false
+          : false,
+      is_below_cutoff:
+        hasCutData
+          ? r.is_below_cutoff || false
+          : false,
+      dormitory:
+        hasCutData
+          ? r.dormitory || '없음'
+          : '없음',
+      feature:
+        hasCutData
+          ? r.feature || ''
+          : ''
     });
   }
 
@@ -585,7 +627,8 @@ export default function Home() {
   }
 
   async function saveEdit(r) {
-    const mode = editForm.cutoff_mode || 'exact';
+    const mode =
+      editForm.cutoff_mode || 'exact';
 
     let newValue = null;
     let graphValue = null;
@@ -595,34 +638,43 @@ export default function Home() {
 
     if (mode === 'exact') {
       if (editForm.percentage_cut === '') {
-        alert('정확한 합격선 숫자를 입력해주세요.');
+        alert(
+          '정확한 합격선 숫자를 입력해주세요.'
+        );
         return;
       }
 
-      newValue = Number(editForm.percentage_cut);
+      newValue =
+        Number(editForm.percentage_cut);
 
       if (
         !Number.isFinite(newValue) ||
         newValue < 0 ||
         newValue > 100
       ) {
-        alert('합격선은 0~100 사이 숫자로 입력해주세요.');
+        alert(
+          '합격선은 0~100 사이 숫자로 입력해주세요.'
+        );
         return;
       }
 
       graphValue = newValue;
       cutoffText = `${newValue}%`;
     } else if (mode === 'estimated') {
-      cutoffText = editForm.cutoff_text?.trim();
+      cutoffText =
+        editForm.cutoff_text?.trim();
 
       if (!cutoffText) {
-        alert('예: 70~80%, 90% 초반대처럼 표시 문구를 입력해주세요.');
+        alert(
+          '예: 70~80%, 90% 초반대처럼 표시 문구를 입력해주세요.'
+        );
         return;
       }
 
-      const inferred = inferGraphValueFromCutoffText(
-        cutoffText
-      );
+      const inferred =
+        inferGraphValueFromCutoffText(
+          cutoffText
+        );
 
       graphValue =
         editForm.graph_value === '' ||
@@ -637,7 +689,9 @@ export default function Home() {
         graphValue < 0 ||
         graphValue > 100
       ) {
-        alert('그래프 대표값을 0~100 사이 숫자로 입력해주세요.');
+        alert(
+          '그래프 대표값을 0~100 사이 숫자로 입력해주세요.'
+        );
         return;
       }
 
@@ -650,88 +704,233 @@ export default function Home() {
       isBelowCutoff = true;
     }
 
+    const yearValue =
+      Number(editForm.year);
+
+    if (
+      !Number.isInteger(yearValue) ||
+      yearValue < 2000 ||
+      yearValue > 2100
+    ) {
+      alert(
+        '연도를 올바르게 입력해주세요.'
+      );
+      return;
+    }
+
+    const schoolId =
+      editForm.school_id ||
+      r.departments?.schools?.id;
+
+    if (!schoolId) {
+      alert(
+        '학교 정보를 찾을 수 없습니다.'
+      );
+      return;
+    }
+
     setEditSaving(true);
 
     try {
       const deptName =
-        editForm.department_name.trim() || '학과정보 없음';
+        editForm.department_name.trim() ||
+        '학과정보 없음';
 
+      // 학교 구분은 자료 유무와 상관없이 수정 가능
       if (
-        editForm.department_id &&
-        deptName !== r.departments?.department_name
-      ) {
-        const { error: departmentError } = await supabase
-          .from('departments')
-          .update({
-            department_name: deptName
-          })
-          .eq('id', editForm.department_id);
-
-        if (departmentError) {
-          throw departmentError;
-        }
-      }
-
-      if (
-        editForm.school_id &&
         editForm.school_type !==
-          r.departments?.schools?.school_type
+        r.departments?.schools?.school_type
       ) {
-        const { error: schoolError } = await supabase
-          .from('schools')
-          .update({
-            school_type: editForm.school_type
-          })
-          .eq('id', editForm.school_id);
+        const { error: schoolError } =
+          await supabase
+            .from('schools')
+            .update({
+              school_type:
+                editForm.school_type
+            })
+            .eq('id', schoolId);
 
         if (schoolError) {
           throw schoolError;
         }
       }
 
-      const { data: settingsData } = await supabase
-        .from('site_settings')
-        .select('approval_mode')
-        .eq('id', 1)
-        .single();
+      let departmentId =
+        editForm.department_id || null;
+
+      // 기존 합격선 자료가 없는 학교라면
+      // 같은 이름의 학과를 먼저 찾고,
+      // 없으면 새 학과를 생성합니다.
+      if (!departmentId) {
+        const {
+          data: existingDepartments,
+          error: departmentFindError
+        } = await supabase
+          .from('departments')
+          .select('id')
+          .eq('school_id', schoolId)
+          .eq('department_name', deptName)
+          .limit(1);
+
+        if (departmentFindError) {
+          throw departmentFindError;
+        }
+
+        if (
+          existingDepartments &&
+          existingDepartments.length > 0
+        ) {
+          departmentId =
+            existingDepartments[0].id;
+        } else {
+          const {
+            data: newDepartment,
+            error: departmentInsertError
+          } = await supabase
+            .from('departments')
+            .insert({
+              school_id: schoolId,
+              department_name: deptName
+            })
+            .select('id')
+            .single();
+
+          if (departmentInsertError) {
+            throw departmentInsertError;
+          }
+
+          departmentId =
+            newDepartment.id;
+        }
+      } else if (
+        deptName !==
+        r.departments?.department_name
+      ) {
+        const { error: departmentError } =
+          await supabase
+            .from('departments')
+            .update({
+              department_name: deptName
+            })
+            .eq('id', departmentId);
+
+        if (departmentError) {
+          throw departmentError;
+        }
+      }
+
+      const { data: settingsData } =
+        await supabase
+          .from('site_settings')
+          .select('approval_mode')
+          .eq('id', 1)
+          .single();
 
       const approvalMode =
         settingsData?.approval_mode ?? false;
 
-      const { error } = await supabase
-        .from('school_cuts')
-        .update({
-          year: editForm.year,
-          percentage_cut: newValue,
-          graph_value: graphValue,
-          cutoff_text: cutoffText,
-          is_estimated: isEstimated,
-          is_below_cutoff: isBelowCutoff,
-          dormitory: editForm.dormitory,
-          feature: editForm.feature,
-          status: approvalMode ? 'pending' : 'approved',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', r.id);
+      const savePayload = {
+        department_id: departmentId,
+        year: yearValue,
+        percentage_cut: newValue,
+        graph_value: graphValue,
+        cutoff_text: cutoffText,
+        is_estimated: isEstimated,
+        is_below_cutoff:
+          isBelowCutoff,
+        dormitory:
+          editForm.dormitory,
+        feature:
+          editForm.feature || '',
+        status:
+          approvalMode
+            ? 'pending'
+            : 'approved',
+        updated_at:
+          new Date().toISOString()
+      };
 
-      if (error) {
-        throw error;
-      }
+      const hasCutData =
+        r.hasCutData !== false &&
+        r.id != null;
 
-      if (r.percentage_cut !== newValue) {
-        const { error: historyError } = await supabase
-          .from('edit_history')
-          .insert({
-            cut_id: r.id,
-            old_value: r.percentage_cut,
-            new_value: newValue
-          });
+      if (hasCutData) {
+        const { error } =
+          await supabase
+            .from('school_cuts')
+            .update(savePayload)
+            .eq('id', r.id);
 
-        if (historyError) {
-          console.error(
-            '수정 기록 저장 오류:',
-            historyError
-          );
+        if (error) {
+          throw error;
+        }
+
+        if (
+          r.percentage_cut !== newValue
+        ) {
+          const {
+            error: historyError
+          } = await supabase
+            .from('edit_history')
+            .insert({
+              cut_id: r.id,
+              old_value:
+                r.percentage_cut,
+              new_value: newValue
+            });
+
+          if (historyError) {
+            console.error(
+              '수정 기록 저장 오류:',
+              historyError
+            );
+          }
+        }
+      } else {
+        // 동일 학과/연도 자료가 이미 있으면
+        // 중복 생성하지 않고 그 행을 갱신합니다.
+        const {
+          data: existingCuts,
+          error: existingCutError
+        } = await supabase
+          .from('school_cuts')
+          .select('id')
+          .eq(
+            'department_id',
+            departmentId
+          )
+          .eq('year', yearValue)
+          .limit(1);
+
+        if (existingCutError) {
+          throw existingCutError;
+        }
+
+        if (
+          existingCuts &&
+          existingCuts.length > 0
+        ) {
+          const { error } =
+            await supabase
+              .from('school_cuts')
+              .update(savePayload)
+              .eq(
+                'id',
+                existingCuts[0].id
+              );
+
+          if (error) {
+            throw error;
+          }
+        } else {
+          const { error } =
+            await supabase
+              .from('school_cuts')
+              .insert(savePayload);
+
+          if (error) {
+            throw error;
+          }
         }
       }
 
@@ -739,9 +938,16 @@ export default function Home() {
       setEditForm(null);
 
       await fetchList();
+
+      if (approvalMode) {
+        alert(
+          '저장되었습니다. 승인 후 목록에 표시됩니다.'
+        );
+      }
     } catch (err) {
       alert(
-        '수정 중 오류가 발생했습니다: ' + err.message
+        '저장 중 오류가 발생했습니다: ' +
+          err.message
       );
     } finally {
       setEditSaving(false);
@@ -1051,9 +1257,11 @@ export default function Home() {
                   const hasCutData =
                     r.hasCutData !== false;
 
+                  const editKey =
+                    r.rowKey || r.id;
+
                   const isEditing =
-                    hasCutData &&
-                    editingId === r.id;
+                    editingId === editKey;
 
                   if (isEditing) {
                     return (
@@ -1438,24 +1646,14 @@ export default function Home() {
 
                       {canEdit && (
                         <td>
-                          {hasCutData ? (
-                            <button
-                              className="secondary"
-                              onClick={() =>
-                                startEdit(r)
-                              }
-                            >
-                              수정
-                            </button>
-                          ) : (
-                            <span
-                              style={{
-                                color: '#999'
-                              }}
-                            >
-                              -
-                            </span>
-                          )}
+                          <button
+                            className="secondary"
+                            onClick={() =>
+                              startEdit(r)
+                            }
+                          >
+                            수정
+                          </button>
                         </td>
                       )}
                     </tr>
