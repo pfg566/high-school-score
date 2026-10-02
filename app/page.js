@@ -124,6 +124,7 @@ export default function Home() {
   const [listRegion, setListRegion] = useState('');
   const [listSchool, setListSchool] = useState('');
   const [listType, setListType] = useState('');
+  const [onlyWithData, setOnlyWithData] = useState(false);
   const [listData, setListData] = useState([]);
   const [listLoading, setListLoading] = useState(false);
 
@@ -144,7 +145,7 @@ export default function Home() {
     if (tab === 'list') {
       fetchList();
     }
-  }, [tab, listRegion, listSchool, listType]);
+  }, [tab, listRegion, listSchool, listType, onlyWithData]);
 
   async function fetchSchools() {
     const { data, error } = await supabase
@@ -279,10 +280,15 @@ export default function Home() {
           !listType ||
           school.school_type === listType;
 
+        const matchesData =
+          !onlyWithData ||
+          latestCutBySchoolId.has(school.id);
+
         return (
           matchesSchool &&
           matchesRegion &&
-          matchesType
+          matchesType &&
+          matchesData
         );
       });
 
@@ -934,6 +940,35 @@ export default function Home() {
               </select>
             </div>
           </div>
+
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 10,
+              marginBottom: 14,
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={onlyWithData}
+              onChange={e =>
+                setOnlyWithData(e.target.checked)
+              }
+              style={{
+                width: 18,
+                height: 18,
+                margin: 0,
+                cursor: 'pointer'
+              }}
+            />
+            <span>
+              자료가 입력된 학교만 보기
+            </span>
+          </label>
 
           {listLoading ? (
             <p
