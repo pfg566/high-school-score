@@ -113,7 +113,7 @@ function inferGraphValueFromCutoffText(rawText) {
 }
 
 export default function Home() {
-  const [tab, setTab] = useState('recommend');
+  const [tab, setTab] = useState('list');
 
   const [percentage, setPercentage] = useState('');
   const [recType, setRecType] = useState('');
@@ -1007,6 +1007,10 @@ export default function Home() {
     }
   }
 
+  const canEdit = siteSettings
+    ? siteSettings.allow_public_edit !== false
+    : true;
+
   // 같은 학교의 여러 학과를 한 그룹으로 묶습니다.
   // 전체목록에서는 지역/학교명은 한 번만 표시하고,
   // 학과별 정보는 아래 행으로 이어서 보여줍니다.
@@ -1043,17 +1047,17 @@ export default function Home() {
     <div>
       <div className="tabs">
         <button
-          className={tab === 'recommend' ? 'active' : ''}
-          onClick={() => setTab('recommend')}
-        >
-          내 성적으로 추천받기
-        </button>
-
-        <button
           className={tab === 'list' ? 'active' : ''}
           onClick={() => setTab('list')}
         >
           전체 목록
+        </button>
+
+        <button
+          className={tab === 'recommend' ? 'active' : ''}
+          onClick={() => setTab('recommend')}
+        >
+          내 성적으로 추천받기
         </button>
       </div>
 
@@ -1279,7 +1283,15 @@ export default function Home() {
                   <th style={{ width: '7%' }}>연도</th>
                   <th style={{ width: '10%' }}>합격선</th>
                   <th style={{ width: '8%' }}>기숙사</th>
-                  <th style={{ width: '10%' }}>최종수정</th>
+                  <th style={{ width: '10%' }}>
+                    최종수정
+                  </th>
+
+                  {canEdit && (
+                    <th style={{ width: '10%' }}>
+                      관리
+                    </th>
+                  )}
                 </tr>
               </thead>
 
@@ -1676,6 +1688,18 @@ export default function Home() {
                           : '정보 없음'}
                       </td>
 
+                      {canEdit && (
+                        <td>
+                          <button
+                            className="secondary"
+                            onClick={() =>
+                              startEdit(r)
+                            }
+                          >
+                            수정
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                   })
@@ -1684,7 +1708,7 @@ export default function Home() {
                 {listData.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={canEdit ? 9 : 8}
                       style={{
                         textAlign: 'center',
                         color: '#999'
