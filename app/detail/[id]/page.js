@@ -3,6 +3,23 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 
+const REGIONS = [
+  '전주시',
+  '군산시',
+  '익산시',
+  '정읍시',
+  '남원시',
+  '김제시',
+  '완주군',
+  '진안군',
+  '무주군',
+  '장수군',
+  '임실군',
+  '순창군',
+  '고창군',
+  '부안군'
+];
+
 function getCutoffDisplayText(row) {
   if (!row) return '-';
   if (row.is_below_cutoff) return '미달';
@@ -310,8 +327,8 @@ export default function DetailPage({ params }) {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingFeature, setEditingFeature] = useState(false);
-  const [featureValue, setFeatureValue] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -346,7 +363,6 @@ export default function DetailPage({ params }) {
       if (detailError) throw detailError;
 
       setData(detailData);
-      setFeatureValue(detailData?.feature || '');
 
       const departmentId = detailData?.departments?.id;
 
@@ -377,7 +393,6 @@ export default function DetailPage({ params }) {
 
       if (historyError) throw historyError;
 
-      // 동일 학과/연도 데이터가 여러 개면 가장 최근 수정본만 표시
       const latestByYear = new Map();
 
       (historyRows || []).forEach(row => {
@@ -394,6 +409,7 @@ export default function DetailPage({ params }) {
         const existingTime = existing.updated_at
           ? new Date(existing.updated_at).getTime()
           : 0;
+
         const rowTime = row.updated_at
           ? new Date(row.updated_at).getTime()
           : 0;
@@ -417,30 +433,206 @@ export default function DetailPage({ params }) {
     }
   }
 
-  function startEditFeature() {
-    setFeatureValue(data.feature || '');
-    setEditingFeature(true);
+  function getMode(row) {
+    if (row?.is_below_cutoff) return 'below';
+    if (row?.is_estimated) return 'estimated';
+    return 'exact';
   }
 
-  function cancelEditFeature() {
-    setEditingFeature(false);
+  function startEditAll() {
+    const s = data?.departments?.schools;
+
+    setEditForm({
+      school_name: s?.school_name || '',
+      region: s?.region || '',
+      school_type: s?.school_type || '전기고',
+      department_name:
+        data?.departments?.department_name || '학과정보 없음',
+      year: data?.year ?? new Date().getFullYear(),
+      cutoff_mode: getMode(data),
+      percentage_cut: data?.percentage_cut ?? '',
+      cutoff_text:
+        data?.cutoff_text ||
+        (
+          data?.percentage_cut != null
+            ? `${data.percentage_cut}%`
+            : ''
+        ),
+      graph_value:
+        data?.graph_value ??
+        data?.percentage_cut ??
+        '',
+      dormitory: data?.dormitory || '',
+      feature: data?.feature || ''
+    });
+
+    setEditing(true);
   }
 
-  async function saveFeature() {
+  function cancelEditAll() {
+    setEditing(false);
+    setEditForm(null);
+  }
+
+  function updateEditForm(key, value) {
+    setEditForm(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  }
+
+  function buildCutPayload() {
+    const mode = editForm.cutoff_mode;
+
+    if (mode === 'below') {
+      return {
+        percentage_cut: null,
+        graph_value: null,
+        cutoff_text: '미달',
+        is_estimated: false,
+        is_below_cutoff: true
+      };
+    }
+
+    if (mode === 'estimated') {
+      const text = editForm.cutoff_text.trim();
+      const graphValue = Number(editForm.graph_value);
+
+      if (!text) {
+        throw new Error(
+          '범위·대략 자료의 표시 문구를 입력해주세요.'
+        );
+      }
+
+      if (
+        !Number.isFinite(graphValue) ||
+        graphValue < 0 ||
+        graphValue > 100
+      ) {
+        throw new Error(
+          '그래프 대표값은 0~100 사이 숫자로 입력해주세요.'
+        );
+      }
+
+      return {
+        percentage_cut: null,
+        graph_value: graphValue,
+        cutoff_text: text,
+        is_estimated: true,
+        is_below_cutoff: false
+      };
+    }
+
+    const exactValue = Number(editForm.percentage_cut);
+
+    if (
+      !Number.isFinite(exactValue) ||
+      exactValue < 0 ||
+      exactValue > 100
+    ) {
+      throw new Error(
+        '정확한 합격선은 0~100 사이 숫자로 입력해주세요.'
+      );
+    }
+
+    return {
+      percentage_cut: exactValue,
+      graph_value: exactValue,
+      cutoff_text: `${exactValue}%`,
+      is_estimated: false,
+      is_below_cutoff: false
+    };
+  }
+
+  async function saveAll() {
+    if (!editForm) return;
+
+    const schoolId = data?.departments?.schools?.id;
+    const departmentId = data?.departments?.id;
+
+    if (!schoolId || !departmentId) {
+      alert('학교 또는 학과 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    const schoolName = editForm.school_name.trim();
+    const departmentName =
+      editForm.department_name.trim() || '학과정보 없음';
+    const year = Number(editForm.year);
+
+    if (!schoolName) {
+      alert('학교명을 입력해주세요.');
+      return;
+    }
+
+    if (
+      !Number.isInteger(year) ||
+      year < 2000 ||
+      year > 2100
+    ) {
+      alert('연도를 올바르게 입력해주세요.');
+      return;
+    }
+
     setSaving(true);
 
     try {
-      const { error } = await supabase
+      const cutoffPayload = buildCutPayload();
+
+      const {
+        data: duplicateRows,
+        error: duplicateError
+      } = await supabase
+        .from('school_cuts')
+        .select('id')
+        .eq('department_id', departmentId)
+        .eq('year', year)
+        .neq('id', id)
+        .limit(1);
+
+      if (duplicateError) throw duplicateError;
+
+      if (duplicateRows && duplicateRows.length > 0) {
+        throw new Error(
+          `${year}년 자료가 이미 존재합니다. 해당 연도 상세페이지에서 수정해주세요.`
+        );
+      }
+
+      const { error: schoolError } = await supabase
+        .from('schools')
+        .update({
+          school_name: schoolName,
+          region: editForm.region,
+          school_type: editForm.school_type
+        })
+        .eq('id', schoolId);
+
+      if (schoolError) throw schoolError;
+
+      const { error: departmentError } = await supabase
+        .from('departments')
+        .update({
+          department_name: departmentName
+        })
+        .eq('id', departmentId);
+
+      if (departmentError) throw departmentError;
+
+      const { error: cutError } = await supabase
         .from('school_cuts')
         .update({
-          feature: featureValue,
+          year,
+          ...cutoffPayload,
+          dormitory: editForm.dormitory,
+          feature: editForm.feature,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
-      if (error) throw error;
+      if (cutError) throw cutError;
 
-      setEditingFeature(false);
+      setEditing(false);
+      setEditForm(null);
       await fetchDetail();
     } catch (err) {
       alert('저장 중 오류가 발생했습니다: ' + err.message);
@@ -461,104 +653,308 @@ export default function DetailPage({ params }) {
 
   return (
     <div className="card">
-      <h2>
-        {s?.school_name} -{' '}
-        {data.departments?.department_name || '학과정보 없음'}
-      </h2>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap'
+        }}
+      >
+        <h2 style={{ marginBottom: 8 }}>
+          {s?.school_name} -{' '}
+          {data.departments?.department_name || '학과정보 없음'}
+        </h2>
+
+        {!editing ? (
+          <button
+            className="secondary"
+            onClick={startEditAll}
+          >
+            수정
+          </button>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              gap: 8
+            }}
+          >
+            <button
+              onClick={saveAll}
+              disabled={saving}
+            >
+              {saving ? '저장중...' : '전체 저장'}
+            </button>
+
+            <button
+              className="secondary"
+              onClick={cancelEditAll}
+              disabled={saving}
+            >
+              취소
+            </button>
+          </div>
+        )}
+      </div>
 
       <CutoffHistoryChart history={history} />
 
       <table>
         <tbody>
           <tr>
-            <th style={{ width: 120 }}>지역</th>
-            <td>{s?.region}</td>
+            <th style={{ width: 120 }}>학교명</th>
+            <td>
+              {editing ? (
+                <input
+                  value={editForm.school_name}
+                  onChange={e =>
+                    updateEditForm(
+                      'school_name',
+                      e.target.value
+                    )
+                  }
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
+              ) : (
+                s?.school_name || '-'
+              )}
+            </td>
           </tr>
+
+          <tr>
+            <th>지역</th>
+            <td>
+              {editing ? (
+                <select
+                  value={editForm.region}
+                  onChange={e =>
+                    updateEditForm('region', e.target.value)
+                  }
+                >
+                  <option value="">지역 선택</option>
+                  {REGIONS.map(region => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                s?.region || '-'
+              )}
+            </td>
+          </tr>
+
           <tr>
             <th>전기/후기</th>
-            <td>{s?.school_type}</td>
+            <td>
+              {editing ? (
+                <select
+                  value={editForm.school_type}
+                  onChange={e =>
+                    updateEditForm(
+                      'school_type',
+                      e.target.value
+                    )
+                  }
+                >
+                  <option value="전기고">전기고</option>
+                  <option value="후기고">후기고</option>
+                </select>
+              ) : (
+                s?.school_type || '-'
+              )}
+            </td>
           </tr>
+
           <tr>
             <th>학과</th>
             <td>
-              {data.departments?.department_name || '학과정보 없음'}
+              {editing ? (
+                <input
+                  value={editForm.department_name}
+                  onChange={e =>
+                    updateEditForm(
+                      'department_name',
+                      e.target.value
+                    )
+                  }
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
+              ) : (
+                data.departments?.department_name ||
+                '학과정보 없음'
+              )}
             </td>
           </tr>
+
           <tr>
             <th>기준년도</th>
-            <td>{data.year}</td>
+            <td>
+              {editing ? (
+                <input
+                  type="number"
+                  min="2000"
+                  max="2100"
+                  value={editForm.year}
+                  onChange={e =>
+                    updateEditForm('year', e.target.value)
+                  }
+                />
+              ) : (
+                data.year
+              )}
+            </td>
           </tr>
+
           <tr>
             <th>합격선</th>
             <td>
-              {getCutoffDisplayText(data)}
-              {data.is_estimated && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    fontSize: 11,
-                    color: '#888'
-                  }}
-                >
-                  (참고 범위)
-                </span>
+              {editing ? (
+                <div>
+                  <select
+                    value={editForm.cutoff_mode}
+                    onChange={e =>
+                      updateEditForm(
+                        'cutoff_mode',
+                        e.target.value
+                      )
+                    }
+                    style={{ marginBottom: 8 }}
+                  >
+                    <option value="exact">정확한 값</option>
+                    <option value="estimated">
+                      범위·대략값
+                    </option>
+                    <option value="below">미달</option>
+                  </select>
+
+                  {editForm.cutoff_mode === 'exact' && (
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={editForm.percentage_cut}
+                      onChange={e =>
+                        updateEditForm(
+                          'percentage_cut',
+                          e.target.value
+                        )
+                      }
+                      placeholder="예: 62"
+                    />
+                  )}
+
+                  {editForm.cutoff_mode === 'estimated' && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 8
+                      }}
+                    >
+                      <input
+                        value={editForm.cutoff_text}
+                        onChange={e =>
+                          updateEditForm(
+                            'cutoff_text',
+                            e.target.value
+                          )
+                        }
+                        placeholder="예: 70~80%, 90% 초반대"
+                      />
+
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={editForm.graph_value}
+                        onChange={e =>
+                          updateEditForm(
+                            'graph_value',
+                            e.target.value
+                          )
+                        }
+                        placeholder="그래프 대표값 예: 75"
+                      />
+                    </div>
+                  )}
+
+                  {editForm.cutoff_mode === 'below' && (
+                    <span style={{ color: '#666' }}>
+                      미달로 저장됩니다.
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {getCutoffDisplayText(data)}
+                  {data.is_estimated && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 11,
+                        color: '#888'
+                      }}
+                    >
+                      (참고 범위)
+                    </span>
+                  )}
+                </>
               )}
             </td>
           </tr>
+
           <tr>
             <th>기숙사</th>
-            <td>{data.dormitory || '-'}</td>
+            <td>
+              {editing ? (
+                <input
+                  value={editForm.dormitory}
+                  onChange={e =>
+                    updateEditForm(
+                      'dormitory',
+                      e.target.value
+                    )
+                  }
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                  placeholder="예: 있음, 없음, 4인 1실"
+                />
+              ) : (
+                data.dormitory || '-'
+              )}
+            </td>
           </tr>
+
           <tr>
             <th>기타 특징</th>
             <td>
-              {editingFeature ? (
-                <div>
-                  <textarea
-                    value={featureValue}
-                    onChange={e => setFeatureValue(e.target.value)}
-                    rows={4}
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                  <div style={{ marginTop: 8 }}>
-                    <button
-                      onClick={saveFeature}
-                      disabled={saving}
-                      style={{ marginRight: 8 }}
-                    >
-                      {saving ? '저장중...' : '저장'}
-                    </button>
-                    <button
-                      className="secondary"
-                      onClick={cancelEditFeature}
-                    >
-                      취소
-                    </button>
-                  </div>
-                </div>
+              {editing ? (
+                <textarea
+                  value={editForm.feature}
+                  onChange={e =>
+                    updateEditForm(
+                      'feature',
+                      e.target.value
+                    )
+                  }
+                  rows={5}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                />
               ) : (
-                <div>
-                  <div
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      marginBottom: 8
-                    }}
-                  >
-                    {data.feature || '등록된 특징이 없어요.'}
-                  </div>
-                  <button
-                    className="secondary"
-                    onClick={startEditFeature}
-                  >
-                    특징 수정
-                  </button>
+                <div style={{ whiteSpace: 'pre-wrap' }}>
+                  {data.feature ||
+                    '등록된 특징이 없어요.'}
                 </div>
               )}
             </td>
           </tr>
+
           <tr>
             <th>최종수정</th>
             <td>
@@ -569,6 +965,32 @@ export default function DetailPage({ params }) {
           </tr>
         </tbody>
       </table>
+
+      {editing && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginTop: 14,
+            justifyContent: 'flex-end'
+          }}
+        >
+          <button
+            onClick={saveAll}
+            disabled={saving}
+          >
+            {saving ? '저장중...' : '전체 저장'}
+          </button>
+
+          <button
+            className="secondary"
+            onClick={cancelEditAll}
+            disabled={saving}
+          >
+            취소
+          </button>
+        </div>
+      )}
 
       <div style={{ marginTop: 16 }}>
         <a href="/">← 목록으로 돌아가기</a>
