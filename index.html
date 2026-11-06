@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>사회 게임 RPG</title>
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="style.css?v=20261106b">
+</head>
+<body>
+
+<canvas id="c" tabindex="0" aria-label="게임 화면"></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div class="card vitals">
+    <div class="who" id="hudNick"></div>
+    <div class="hp-row hprow-main"><span>체력</span><b id="hpTxt">100 / 100</b></div>
+    <div class="hpbar hpbar-main"><i id="hpBar" style="width:100%"></i></div>
+    <div class="door-row" id="parcelRow" hidden><div class="hp-row"><span>택배 배달</span><b id="parcelTxt">0 / 0</b></div><div class="hpbar parcel"><i id="parcelBar" style="width:0%"></i></div></div>
+    <div class="door-row" id="iceRow" hidden><div class="hp-row"><span>🧊 빙하</span><b id="iceTxt">6/6 · 100%</b></div><div class="hpbar ice"><i id="iceBar" style="width:100%"></i></div></div>
+    <div class="door-row" id="doorRow" hidden><div class="hp-row"><span>성문</span><b id="doorTxt">500 / 500</b></div><div class="hpbar door"><i id="doorBar" style="width:100%"></i></div></div>
+    <div class="meta"><span>웨이브 <b id="waveTxt">1/3</b></span><span>처치 <b id="killTxt">0</b></span><span>정답 <b id="corTxt">0/0</b></span></div>
+  </div>
+  <div class="right">
+    <button class="mute" id="muteBtn" aria-label="소리 켜기·끄기">🔊</button>
+    <div class="card next" id="nextCard">돌발 퀴즈까지 <b id="nextTxt">30</b>초</div>
+    <div class="card next bgcard" id="bgCard" hidden>보스가 힘을 모으는 중 <b id="bgTxt">20</b>초</div>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+
+<button class="btn boardbtn" id="boardBtn" hidden>🏆 이번 시간 순위</button>
+<button class="btn boardbtn notesbtn" id="notesBtn" hidden>📒 내 오답 노트</button>
+<div class="screen boardpop" id="notesPop" hidden>
+  <div class="panel card" role="dialog" aria-labelledby="notesTitle">
+    <div class="bd-head"><h2 id="notesTitle">📒 내 오답 노트</h2><button class="btn small ghost" id="notesClose">닫기</button></div>
+    <p class="bd-sub">게임에서 끝내 못 맞힌 문제가 모여요. 먼저 스스로 풀어 보고 '정답 보기'를 눌러요. 다음 게임에서 맞히면 '이제 맞혀요'로 옮겨져요.</p>
+    <div class="nt-tabs" id="notesTabs"></div>
+    <div id="notesList"></div>
+  </div>
+</div>
+<div class="screen boardpop" id="boardPop" hidden>
+  <div class="panel card" role="dialog" aria-labelledby="boardTitle">
+    <div class="bd-head"><h2 id="boardTitle">🏆 이번 시간 순위</h2><button class="btn small ghost" id="boardClose">닫기</button></div>
+    <p class="bd-sub" id="boardSub"></p>
+    <div id="boardList"></div>
+    <p class="bd-note">같은 반 · 이번 게임 시간에 참여한 친구들만 보여요. 점수는 가장 잘한 판 기준이에요.</p>
+  </div>
+</div>
+<div class="run-hud card" id="runHud" hidden><span id="runHearts">❤️❤️❤️</span><b id="runProg">문제 1/12</b><span id="runCombo"></span><span id="runCoins">🪙 0</span></div>
+<div class="run-q card" id="runQ" hidden><div class="run-qtext" id="runQText"></div><div class="run-opts" id="runOpts"></div><div class="run-bar"><i id="runBar"></i></div></div>
+<div class="run-res card" id="runRes" hidden></div>
+<div class="run-help card" id="runHelp" hidden>← → (A D) 줄 바꾸기 · 스페이스 점프 · 정답 색깔 문이 있는 줄로 통과!</div>
+<div class="run-hud card" id="stHud" hidden><span id="stLives">❤️❤️❤️</span><b id="stProg"></b><span id="stScore">0점</span></div>
+<div class="run-q card" id="stQ" hidden><div class="run-qtext" id="stQText"></div><div class="run-opts" id="stOpts"></div><div class="run-bar"><i id="stBar"></i></div><div class="st-lock"><span id="stLock"></span><b id="stTime"></b></div></div>
+<div class="run-res card" id="stMsg" hidden></div>
+<div class="st-rank card" id="stRank" hidden><h2>🏆 발판 서바이벌 순위</h2><ol id="stRankList"></ol><p id="stRankMe"></p><button class="btn" id="stRankGo">내 결과 보기</button></div>
+<div class="tw-hud" id="twHud" hidden><div class="tw-scores" id="twScores"></div><div class="tw-time" id="twTime">5:00</div><div class="tw-gold" id="twGold"></div></div>
+<div class="tw-me card" id="twMe" hidden><div class="tw-g"><div class="tw-gbar"><i id="twGauge"></i></div><span id="twGTxt">밀림 게이지 0%</span></div><div class="tw-slot" id="twItem"></div><div class="tw-slot" id="twSkill"></div><div class="tw-fx" id="twFx"></div></div>
+<div class="tw-feed" id="twFeed" hidden></div>
+<div class="run-res card tw-wait" id="twWait" hidden></div>
+<div class="st-rank card" id="twEnd" hidden><h2 id="twEndTitle"></h2><div class="tw-scores" id="twEndSc"></div><ul class="tw-mvp" id="twEndMvp"></ul><p id="twEndMe"></p><button class="btn" id="twEndGo">내 결과 받기</button></div>
+<div class="timetop" id="timeCard" hidden><small>남은 시간</small><b id="timeTxt">5:00</b></div>
+
+<div class="stack" id="stack">
+  <div class="card loc" id="locCard" hidden>
+    <div class="loc-top"><span class="tag" style="background:var(--ink)">위치 퀴즈</span><span class="loc-time" id="locTime">25초</span></div>
+    <p id="locText"></p>
+    <small id="locHelp">맞다고 생각하는 거점의 바닥으로 달려가세요</small>
+    <div class="legend"><span style="background:var(--hq)">본사 · 북쪽</span><span style="background:var(--lab)">연구소 · 서쪽</span><span style="background:var(--fac)">생산 공장 · 동쪽</span></div>
+    <div class="timer"><i id="locBar" style="width:100%"></i></div>
+  </div>
+  <div class="card gate" id="gateCard" hidden>잠김 · 빛나는 거점 기둥의 퀴즈를 맞히면 다음 웨이브가 열려요</div>
+  <div class="card bossbar" id="bossbar" hidden>
+    <div class="boss-top"><p id="bossName">산업 공동화 해골 장군</p><div class="shields" id="shields"></div></div>
+    <div class="hpbar"><i id="bossHp" style="width:100%"></i></div>
+    <small id="bossHelp">퀴즈를 맞히면 보호막이 깨지고, 틀리면 되살아나요. 붉은 원이 보이면 피하세요!</small>
+  </div>
+</div>
+
+<div class="card hint" id="hint" hidden>WASD 이동 · 스페이스 공격(연타하면 3단 콤보) · Shift 구르기 · E 회전 베기 · 빛나는 기둥과 지식 카드에 다가가면 퀴즈</div>
+<div class="skillbar" id="skillbar" hidden>
+  <div class="sk" id="skDodge"><i class="cdm"></i><b>Shift</b><span>구르기</span></div>
+  <div class="sk" id="skSpin"><i class="cdm"></i><em class="cdt"></em><b>E</b><span>회전 베기</span></div>
+  <div class="sk ult" id="skUlt"><i class="cdm"></i><em class="cdt"></em><b>Q</b><span>필살기</span></div>
+</div>
+<div class="card prompt" id="prompt" hidden></div>
+<div class="fpsbox" id="fpsBox" hidden></div>
+<div class="banner" id="banner"></div>
+<div class="hurt" id="hurt"></div>
+
+<div class="touch" id="touch" hidden>
+  <div class="joy" id="joy"><div class="knob" id="knob"></div></div>
+  <button class="atk" id="atkBtn" aria-label="공격">공격</button>
+  <button class="skb" id="dodgeBtn" aria-label="구르기"><i class="cdm"></i><span>구르기</span></button>
+  <button class="skb" id="spinBtn" aria-label="회전 베기"><i class="cdm"></i><em class="cdt"></em><span>회전<br>베기</span></button>
+  <button class="skb ult" id="ultBtn" aria-label="필살기"><i class="cdm"></i><em class="cdt"></em><span>필살기</span></button>
+</div>
+
+<div class="screen shop" id="shop" hidden>
+  <div class="shop-panel card">
+    <div class="shop-top"><h2>상점 · 꾸미기</h2><span class="pc-coins"><i></i><b id="shopCoins">0</b></span><button class="btn small ghost" id="shopClose">닫기</button></div>
+    <p class="shop-note" id="shopNote"></p>
+    <div class="tabs jobtabs" id="shopJobs"></div>
+    <div class="tabs" id="shopTabs"></div>
+    <div class="shop-grid" id="shopGrid"></div>
+    <div class="shop-act"><div id="shopSel"></div><button class="btn small" id="shopBuy"></button></div>
+    <p class="ed-status" id="shopMsg" role="status"></p>
+    <small class="shop-tip">왼쪽 캐릭터를 끌면 돌려 볼 수 있어요 · 꾸미기는 모양만 바뀌고 힘은 똑같아요</small>
+  </div>
+</div>
+
+<div class="screen step-login" id="title">
+  <div class="brand loginonly">
+  <div class="logo loginonly" role="img" aria-label="사회 게임 RPG"><span style="--c:#e5484d;--r:-4deg;--d:0ms">사</span><span style="--c:#f08c28;--r:3deg;--d:70ms">회</span><span style="--c:#f2b705;--r:-2deg;--d:140ms">게</span><span style="--c:#38a85a;--r:4deg;--d:210ms">임</span><span style="--c:#2f86e8;--r:-3deg;--d:280ms">R</span><span style="--c:#4f52d9;--r:2deg;--d:350ms">P</span><span style="--c:#9450d8;--r:-4deg;--d:420ms">G</span></div>
+    <p class="title-tag">퀴즈로 강해지는 사회 판타지 모험</p>
+  </div>
+  <div class="lobby-stage lobby" id="lobbyStage" aria-hidden="true"></div>
+  <div class="lobby-tl lobby">
+    <div class="mini-logo" role="img" aria-label="사회 게임 RPG"><span style="--c:#e5484d;--r:-4deg;--d:0ms">사</span><span style="--c:#f08c28;--r:3deg;--d:70ms">회</span><span style="--c:#f2b705;--r:-2deg;--d:140ms">게</span><span style="--c:#38a85a;--r:4deg;--d:210ms">임</span><span style="--c:#2f86e8;--r:-3deg;--d:280ms">R</span><span style="--c:#4f52d9;--r:2deg;--d:350ms">P</span><span style="--c:#9450d8;--r:-4deg;--d:420ms">G</span></div>
+    <div class="profilecard lobby" id="profileCard" hidden>
+      <div class="pc-top"><span class="pc-lv" id="pcLv">Lv.1</span><div class="pc-id"><b id="pcName"></b><small id="pcWho"></small></div><span class="pc-coins"><i></i><b id="pcCoins">0</b></span></div>
+      <div class="xpbar"><i id="pcXp" style="width:0%"></i></div>
+      <div class="pc-foot"><small id="pcXpTxt"></small><button class="link" id="pcLogout">로그아웃</button></div>
+    </div>
+    <div class="profilecard guestcard lobby" id="guestCard" hidden>
+      <div class="pc-top"><span class="pc-lv">테스트</span><div class="pc-id"><b id="gcName"></b><small id="gcWho"></small></div></div>
+      <div class="pc-foot"><small>선생님 테스트 모드 · 경험치·코인은 쌓이지 않아요.</small><button class="link" id="gcBack">처음 화면으로</button></div>
+    </div>
+  </div>
+  <button class="gearbtn lobby" id="gearBtn" aria-label="설정" aria-expanded="false" aria-controls="setPop"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.4 7.4 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5a.5.5 0 0 0 .6.2l2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6a.5.5 0 0 0 .5.4h4a.5.5 0 0 0 .5-.4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1a.5.5 0 0 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg></button>
+  <div class="setpop card" id="setPop" role="dialog" aria-label="설정" hidden>
+    <p class="setpop-h">설정</p>
+    <label class="unitpick" id="qPick"><span>화질</span><select id="qSel"><option value="auto">자동 (추천 · 컴퓨터에 맞춰 조절)</option><option value="high">고화질 (풀밭·빛 효과 모두)</option><option value="medium">보통</option><option value="low">가벼움 (느린 컴퓨터)</option></select></label>
+    <label class="unitpick"><span>조작</span><select id="ctrlSel"><option value="auto">자동 (마우스를 움직이면 마우스 조준)</option><option value="kb">키보드만 (마우스·터치패드 없이)</option><option value="mouse">마우스 조준 우선</option></select></label>
+    <label class="fpsopt"><input type="checkbox" id="fpsChk"> 화면 속도(FPS) 보기</label>
+    <button class="btn ghost" id="editBtn" hidden>문제 관리</button>
+  </div>
+  <div class="panel card">
+    <p class="login-title loginonly">로그인</p>
+    <div class="classpick loginonly" id="classPick">
+      <label class="nickfield" id="pkSchWrap"><span>학교</span><select id="pkSch"></select></label>
+      <label class="nickfield"><span>학급</span><select id="pkCls"><option value="">불러오는 중…</option></select></label>
+    </div>
+    <p class="namehint loginonly" id="noClassNote" hidden>선생님이 아직 학급을 만들지 않았어요. 학급이 만들어지면 로그인할 수 있어요.</p>
+    <div class="loginonly" id="loginBox">
+      <div class="who-row login">
+        <label class="nickfield"><span>번호</span><input id="lgNum" type="number" min="1" max="60" inputmode="numeric" placeholder="7"></label>
+        <label class="nickfield"><span id="lgCodeLbl">처음이면 코드 (6자리)</span><input id="lgCode" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB12CD"></label>
+      </div>
+      <div class="login-actions"><button class="btn ghost" id="lgBtn">로그인</button><button class="link" id="guestBtn" hidden>테스트 모드 (선생님 전용)</button></div>
+      <p class="namehint" id="lgHint">처음 들어올 때만 선생님께 받은 코드를 넣어요. 그다음부터는 내가 만든 비밀번호로 들어와요.</p>
+      <p class="nickerr" id="lgErr" hidden></p>
+    </div>
+    <div class="loginonly" id="pwBox" hidden>
+      <p class="namehint">다음부터 쓸 <b>비밀번호</b>를 만들어 주세요. 6자 이상, 영어·숫자·기호 아무거나 괜찮아요. 친구에게 알려 주지 마세요!</p>
+      <div class="who-row login">
+        <label class="nickfield"><span>새 비밀번호</span><input id="pw1" type="password" maxlength="30" autocomplete="new-password"></label>
+        <label class="nickfield"><span>한 번 더</span><input id="pw2" type="password" maxlength="30" autocomplete="new-password"></label>
+      </div>
+      <div class="login-actions"><button class="btn ghost" id="pwSave">비밀번호 저장</button></div>
+      <p class="nickerr" id="pwErr" hidden></p>
+    </div>
+    <div class="loginonly" id="nameBox" hidden>
+      <p class="namehint">처음 오셨네요! 게임에서 쓸 이름(또는 별명)을 정해 주세요. 나중에 선생님만 바꿀 수 있어요.</p>
+      <div class="login-actions"><label class="nickfield grow"><span>이름</span><input id="pfName" maxlength="12" autocomplete="off" placeholder="예: 지우"></label><button class="btn ghost" id="pfSave">저장</button></div>
+      <p class="nickerr" id="pfErr" hidden></p>
+    </div>
+    <div class="loginonly" id="guestBox" hidden>
+      <div class="login-actions">
+        <label class="nickfield grow"><span>번호와 이름 (예: 7 지우)</span><input id="nick" maxlength="12" autocomplete="off" placeholder="예: 7 지우"></label>
+        <button class="btn ghost" id="guestGo">들어가기</button>
+      </div>
+      <p class="nickerr" id="nickErr" hidden>학급을 고르고 번호와 이름을 입력해야 시작할 수 있어요.</p>
+      <p class="namehint">선생님 테스트 모드예요. 결과만 저장되고 경험치·코인은 쌓이지 않아요. <button class="link inline" id="backLogin">코드로 로그인하기</button></p>
+    </div>
+    <h2 class="round-h lobby">이번 판</h2>
+    <div class="eyebrow lobby" id="unitEyebrow">중3 사회2 · IX-2 다국적 기업의 공간적 분업</div>
+    <div class="playpick lobby" id="playPick">
+      <p class="pp-lock" id="ppLock"></p>
+      <label class="unitpick" id="unitPick" hidden><span>단원</span><select id="unitSelect"></select></label>
+      <label class="unitpick" id="mapPick" hidden><span>맵</span><select id="mapSelect"></select></label>
+      <div class="stylepick" id="stylePick" hidden role="group" aria-label="플레이 방식">
+        <button data-style="battle" aria-pressed="true"><b>⚔️ 일반</b><small>몬스터와 싸워요</small></button>
+        <button data-style="peace" aria-pressed="false"><b>🕊️ 평화</b><small>싸우지 않아요</small></button>
+      </div>
+    </div>
+    <p class="lobby" id="mapDesc">다국적 기업의 세 거점을 지키세요. 퀴즈를 맞혀야 강해지고, 웨이브가 열리고, 보스의 보호막이 깨져요.</p>
+    <div class="zones lobby" id="mapZones">
+      <div class="zone z-hq"><b>본사 · 북쪽</b><span>선진국 대도시 · 경영과 관리</span></div>
+      <div class="zone z-lab"><b>연구소 · 서쪽</b><span>고급 인력 · 기술 개발</span></div>
+      <div class="zone z-fac"><b>생산 공장 · 동쪽</b><span>낮은 임금 · 넓은 땅</span></div>
+    </div>
+    <details class="howto lobby"><summary>게임 방법 보기</summary>
+    <ul class="rules" id="mapRules">
+      <li><b>위치 퀴즈:</b> 상황을 읽고 알맞은 거점 바닥으로 직접 달려가요</li>
+      <li><b>거점 기둥:</b> 맞히면 다음 웨이브가 열려요</li>
+      <li><b>지식 카드:</b> 몬스터가 떨어뜨려요. 주우면 O/X 문제</li>
+      <li><b>보스:</b> 보호막 4개는 퀴즈 정답으로만 깨지고, 오답이면 되살아나요. 내려찍기와 부하 소환을 조심하세요</li>
+      <li>정답은 강화, 오답은 약화 · 틀린 문제는 다시 나와요 · 체력 0이면 게임 오버</li>
+    </ul>
+    </details>
+    <div class="modepick lobby" id="modePick">
+      <label class="mode easy"><input type="radio" name="mode" value="easy"><span><b>쉬움</b><small></small></span></label>
+      <label class="mode"><input type="radio" name="mode" value="normal" checked><span><b>보통</b><small></small></span></label>
+      <label class="mode hard"><input type="radio" name="mode" value="hard"><span><b>어려움</b><small></small></span></label>
+      <label class="mode hero" id="modeHeroL"><input type="radio" name="mode" value="hero" id="modeHero"><span><b>영웅</b><small></small></span></label>
+    </div>
+    <p class="bankinfo lobby" id="bankInfo"></p>
+    <div class="title-actions lobby">
+      <button class="btn" id="startBtn">게임 시작</button>
+      <button class="btn twbtn" id="twBtn" hidden>⚔️ 조별 점령전 · 입장하기</button>
+      <button class="btn stagebtn" id="stageBtn" hidden>🟦 발판 서바이벌 · 입장하기</button>
+      <button class="btn ghost partybtn" id="partyBtn">👥 파티 모드 · 점령전 (최대 5명)</button>
+      <p class="gatenote" id="gateNote" hidden></p>
+    </div>
+    <div class="history lobby" id="history" hidden></div>
+    <p class="netwarn" id="netWarn" hidden></p>
+    <div class="teacher-row">
+      <span id="teacherState">선생님이신가요?</span>
+      <span><a href="teacher.html">결과 보기</a> · <a href="#" id="teacherLogin">문제 관리 로그인</a></span>
+    </div>
+  </div>
+  <div class="jobbar card lobby">
+    <div class="jobpick" id="jobPick">
+      <p class="jobtitle">직업 고르기 <small class="jobtip">화면을 끌면 캐릭터가 돌아가요</small></p>
+      <div class="jobs" role="group" aria-label="직업 고르기">
+        <button data-job="knight" aria-pressed="true"><i>🛡️</i><b>기사</b><em class="jdiff d2">보통</em><small>근접 · 튼튼함</small></button>
+        <button data-job="archer" aria-pressed="false"><i>🏹</i><b>궁수</b><em class="jdiff d3">어려움</em><small>방향키·마우스 조준</small></button>
+        <button data-job="mage" aria-pressed="false"><i>🔮</i><b>마법사</b><em class="jdiff d1">쉬움</em><small>자동 조준 · 범위</small></button>
+      </div>
+      <div class="elems" id="elemPick" role="group" aria-label="마법 원소 고르기" hidden><span>마법 원소</span>
+        <button data-elem="fire" aria-pressed="true">🔥 불</button><button data-elem="ice" aria-pressed="false">❄️ 얼음</button><button data-elem="bolt" aria-pressed="false">⚡ 번개</button><small class="elemnote" id="elemNote"></small>
+      </div>
+      <p class="jobdesc" id="jobDesc"></p>
+    </div>
+  </div>
+  <button class="btn ghost shopbtn shopcorner lobby" id="shopBtn" disabled>🎒 상점 · 꾸미기</button>
+  <div class="partypanel card" id="partyPanel" hidden>
+    <div class="pp-top"><h2>👥 파티 모드 · 점령전</h2><button class="btn small ghost" id="ppClose">닫기</button></div>
+    <div id="ppList">
+      <p class="pp-note" id="ppNote"></p>
+      <div class="pp-rooms" id="ppRooms"></div>
+      <div class="pp-make"><b>새 방 만들기</b>
+        <div class="pp-modes"><button data-pmode="quiz" class="on">🧠 퀴즈 점령<small>게이지를 채우고 퀴즈를 맞혀야 점령</small></button><button data-pmode="fight">⚔️ 몹 막기<small>퀴즈 없이 거점을 지켜요</small></button></div>
+        <button class="btn" id="ppCreate">방 만들기</button></div>
+    </div>
+    <div id="ppRoom" hidden>
+      <p class="pp-mode" id="ppMode"></p>
+      <ol class="pp-members" id="ppMembers"></ol>
+      <p class="pp-note" id="ppRoomNote"></p>
+      <div class="pp-act"><button class="btn" id="ppStart" hidden>시작</button><button class="btn ghost" id="ppLeave">방 나가기</button></div>
+    </div>
+  </div>
+</div>
+<div class="partyhud" id="partyHud" hidden><div class="cq-pts" id="cqPts"></div><div class="cq-info" id="cqInfo"></div></div>
+<div class="partylist" id="partyList" hidden></div>
+
+<div class="screen locintro reviveintro" id="reviveIntro" hidden>
+  <div class="panel card" role="dialog" aria-labelledby="reviveTitle">
+    <p class="big" id="reviveTitle">부활 찬스!</p>
+    <p class="q">이번 판에서 틀렸던 문제 2개를 모두 맞히면<br>체력 절반으로 다시 일어나요.</p>
+    <p class="note">한 판에 한 번만 쓸 수 있어요. 하나라도 틀리면 게임이 끝나요.</p>
+    <button class="btn" id="reviveGo">부활 도전! (Enter)</button>
+  </div>
+</div>
+
+<div class="screen locintro prepintro" id="prep" hidden>
+  <div class="panel card" role="dialog" aria-labelledby="prepTitle">
+    <div class="prep-steps" id="prepSteps"></div>
+    <p class="big" id="prepTitle">정비 시간!</p>
+    <p class="q" id="prepQ"></p>
+    <div class="upcards" id="prepCards" hidden></div>
+    <p class="note" id="prepNote"></p>
+    <button class="btn" id="prepGo">정비 시작 (Enter)</button>
+  </div>
+</div>
+
+<div class="screen locintro" id="locIntro" hidden>
+  <div class="panel card" role="dialog" aria-labelledby="locIntroQ">
+    <p class="big">위치 퀴즈!</p>
+    <p class="q" id="locIntroQ"></p>
+    <div class="zgrid">
+      <div style="background:var(--hq)">본사<small id="dirHq">북쪽</small></div>
+      <div style="background:var(--lab)">연구소<small id="dirLab">서쪽</small></div>
+      <div style="background:var(--fac)">생산 공장<small id="dirFac">동쪽</small></div>
+    </div>
+    <p class="note">정답이라고 생각하는 거점의 빛기둥으로 25초 안에 달려가세요! 내 발밑의 화살표가 각 거점 방향을 알려줘요.</p>
+    <button class="btn" id="locGo">달려가기! (Enter)</button>
+  </div>
+</div>
+
+<div class="screen" id="quiz" hidden>
+  <div class="panel card" role="dialog" aria-labelledby="qtext">
+    <div class="qhead"><span class="tag" id="qtag">돌발 퀴즈</span><span class="qtime" id="qtime">20초</span></div>
+    <div class="timer" id="qtimer"><i id="qbar" style="width:100%"></i></div>
+    <h2 id="qtext"></h2>
+    <div class="opts" id="qopts"></div>
+    <div class="res" id="qres" hidden>
+      <p class="verdict" id="qverdict"></p>
+      <p class="extra" id="qextra" hidden></p>
+      <p class="exp" id="qexp"></p>
+      <button class="btn" id="qnext">계속하기 (Enter)</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="end" hidden>
+  <div class="panel card">
+    <div class="eyebrow" id="endEyebrow">결과</div>
+    <p class="endwho" id="endWho"></p>
+    <h1 id="endTitle">게임 오버</h1>
+    <p id="endMsg"></p>
+    <div class="scorebox"><span>점수</span><b id="sScore">0</b><small id="sScoreNote">정답 100점 · 처치 10점 · 승리 500점</small></div>
+    <div class="stats">
+      <div class="stat"><b id="sKills">0</b><span>처치한 몬스터</span></div>
+      <div class="stat"><b id="sCorrect">0/0</b><span>맞힌 퀴즈</span></div>
+      <div class="stat"><b id="sTime">0:00</b><span>버틴 시간</span></div>
+    </div>
+    <div class="rewardbox" id="rewardBox" hidden></div>
+    <div class="review" id="review"></div>
+    <div class="savebox wait" id="saveBox"><span id="saveMsg">결과를 저장하는 중…</span><button id="saveRetry" hidden>다시 저장</button></div>
+    <div class="submit">
+      <a class="btn" id="submitLink" href="#" target="_blank" rel="noopener" hidden>결과 제출하기</a>
+      <button class="btn ghost" id="copyBtn" hidden>결과 복사하기</button>
+      <p class="ed-status" id="copyStatus" role="status"></p>
+      <textarea id="copyText" rows="4" readonly hidden></textarea>
+    </div>
+    <div class="end-actions">
+      <button class="btn" id="againBtn">다시 하기</button>
+      <button class="btn ghost" id="homeBtn">처음 화면으로</button>
+      <button class="btn ghost" id="boardEnd" hidden>🏆 이번 시간 순위</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="editor" hidden>
+  <div class="panel card editor">
+    <div class="ed-head">
+      <div><div class="eyebrow">선생님 전용</div><h1>문제 관리</h1></div>
+      <div class="ed-actions">
+        <button class="btn small" id="edSave">저장하기</button>
+        <button class="btn small ghost" id="edClose">닫기</button>
+      </div>
+    </div>
+    <div class="unitbar">
+      <label class="fld"><span>단원</span><select id="edUnit"></select></label>
+      <div class="unit-actions">
+        <button class="btn small ghost" id="edUnitAdd">+ 새 단원</button>
+        <button class="btn small ghost" id="edUnitRename">이름 바꾸기</button>
+        <button class="btn small ghost" id="edUnitActive">수업 단원으로 지정</button>
+      </div>
+      <label class="fld"><span>맵</span><select id="edMap"><option value="zones">세 거점 맵 · 거점 이름을 단원에 맞게 바꿔요 (4가지 유형 모두 필요)</option><option value="general">들판 마을 맵 · 어느 단원이든 (4지선다 + O/X만 있으면 돼요)</option><option value="defense">성벽 디펜스 맵 · 어느 단원이든 (4지선다 + O/X만 있으면 돼요)</option><option value="island">서비스업 섬 맵 · 택배를 배달하며 싸워요 (4지선다 + O/X만 있으면 돼요)</option><option value="glacier">녹는 빙하 맵 · 북극곰의 빙하를 지켜요 (4지선다 + O/X만 있으면 돼요)</option><option value="runner">정답 러너 · 달리면서 정답 문으로 통과해요 (4지선다 + O/X만 있으면 돼요)</option></select></label>
+      <div class="zcfgbox" id="edZcfg" hidden>
+        <div class="zc-head"><b>세 거점 이름</b><span>빠른 설정:</span><span id="edZPresets"></span></div>
+        <div class="zc-grid">
+          <label class="fld"><span>북쪽 거점 (파랑)</span><input data-zc="n0" maxlength="10"></label><label class="fld"><span>설명</span><input data-zc="s0" maxlength="22"></label>
+          <label class="fld"><span>서쪽 거점 (초록)</span><input data-zc="n1" maxlength="10"></label><label class="fld"><span>설명</span><input data-zc="s1" maxlength="22"></label>
+          <label class="fld"><span>동쪽 거점 (주황)</span><input data-zc="n2" maxlength="10"></label><label class="fld"><span>설명</span><input data-zc="s2" maxlength="22"></label>
+          <label class="fld"><span>분류 퀴즈 선택지 1</span><input data-zc="c0" maxlength="14"></label><label class="fld"><span>분류 퀴즈 선택지 2</span><input data-zc="c1" maxlength="14"></label>
+          <label class="fld wide"><span>분류 퀴즈 질문 (문장 뒤에 붙어요)</span><input data-zc="q" maxlength="30"></label>
+        </div>
+      </div>
+      <div class="rename" id="edRenameBox" hidden>
+        <label class="fld"><span>단원 이름</span><input id="edRenameInput" placeholder="예: 중3 사회2 · IX-3 서비스업의 세계화"></label>
+        <button class="btn small" id="edRenameOk">확인</button>
+      </div>
+      <p class="unit-note" id="edUnitNote"></p>
+    </div>
+    <p class="ed-status" id="edStatus" role="status"></p>
+    <div class="tabs" id="edTabs" role="tablist"></div>
+    <p class="ed-desc" id="edDesc"></p>
+    <div class="qlist" id="edList"></div>
+    <button class="add" id="edAdd">+ 문제 추가</button>
+    <details class="bulk">
+      <summary>엑셀·구글 시트에서 한꺼번에 붙여넣기</summary>
+      <p class="ed-desc">시트에서 아래 순서대로 열을 만들고, 행을 통째로 복사해 붙여넣으세요. 첫 줄이 제목 행이어도 괜찮아요.</p>
+      <p class="cols" id="edCols"></p>
+      <textarea id="edPaste" rows="5" placeholder="여기에 붙여넣기"></textarea>
+      <div class="bulk-actions">
+        <button class="btn small" id="edImport">목록 끝에 추가</button>
+        <button class="btn small ghost" id="edCopy">지금 목록을 표로 복사</button>
+      </div>
+      <p class="ed-status" id="edBulkStatus" role="status"></p>
+    </details>
+    <details class="bulk" hidden>
+      <summary>결과 제출 주소 (구글 설문 등)</summary>
+      <p class="ed-desc">학생이 게임을 마치면 '결과 제출하기' 버튼이 이 주소를 새 창으로 열어요. 주소 안의 아래 낱말은 학생의 결과로 바뀌어 들어가요. 비워 두면 버튼이 나타나지 않고 '결과 복사하기'만 보여요.</p>
+      <p class="cols">{닉네임} {단원} {결과} {점수} {정답} {문제수} {정답률} {처치} {시간} {틀린문제}</p>
+      <p class="ed-desc">구글 설문이라면: 설문 편집 화면 오른쪽 위 ⋮ 메뉴 → '미리 채워진 링크 가져오기' → 각 칸에 {닉네임}, {점수}처럼 적고 → '링크 가져오기'로 복사한 주소를 아래에 붙여넣으세요.</p>
+      <label class="fld"><span>주소 (https://로 시작)</span><input id="edSubmitUrl" placeholder="https://docs.google.com/forms/..."></label>
+    </details>
+    <details class="bulk">
+      <summary>백업 · 내년에 다시 쓰기</summary>
+      <p class="ed-desc">모든 단원의 문제를 파일 하나로 내려받아 보관할 수 있어요. 나중에 이 파일을 불러오면 그대로 되살아나요.</p>
+      <div class="bulk-actions">
+        <button class="btn small" id="edBackup">전체 백업 파일 받기</button>
+        <label class="btn small ghost filebtn">백업 파일 불러오기<input type="file" id="edRestore" accept=".json,application/json"></label>
+      </div>
+      <p class="ed-status" id="edBackupStatus" role="status"></p>
+    </details>
+    <div class="ed-foot">
+      <button class="link" id="edUnitDel">이 단원 삭제</button>
+      <button class="link" id="edReset">이 단원을 기본 문제로 되돌리기</button>
+    </div>
+  </div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/GLTFLoader.js"></script>
+<script src="lib/SkeletonUtils.js"></script>
+<script src="lib/CopyShader.js"></script>
+<script src="lib/LuminosityHighPassShader.js"></script>
+<script src="lib/GammaCorrectionShader.js"></script>
+<script src="lib/EffectComposer.js"></script>
+<script src="lib/RenderPass.js"></script>
+<script src="lib/ShaderPass.js"></script>
+<script src="lib/UnrealBloomPass.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/01-data.js?v=20261106b"></script>
+<script src="js/02-graphics.js?v=20261106b"></script>
+<script src="js/02m-mood.js?v=20261106b"></script>
+<script src="js/03-world.js?v=20261106b"></script>
+<script src="js/04-island.js?v=20261106b"></script>
+<script src="js/04g-glacier.js?v=20261106b"></script>
+<script src="js/04r-runner.js?v=20261106b"></script>
+<script src="js/04s-stage.js?v=20261106b"></script>
+<script src="js/04t-teamwar.js?v=20261106b"></script>
+<script src="js/05-play.js?v=20261106b"></script>
+<script src="js/06-jobs.js?v=20261106b"></script>
+<script src="js/06p-player.js?v=20261106b"></script>
+<script src="js/07-quiz.js?v=20261106b"></script>
+<script src="js/07b-prep.js?v=20261106b"></script>
+<script src="js/08-hud.js?v=20261106b"></script>
+<script src="js/09-server.js?v=20261106b"></script>
+<script src="js/10-shop.js?v=20261106b"></script>
+<script src="js/11-gate-editor.js?v=20261106b"></script>
+<script src="js/12-lobby.js?v=20261106b"></script>
+<script src="js/13-loop.js?v=20261106b"></script>
+<script src="js/14-party.js?v=20261106b"></script>
+<script src="js/15-board.js?v=20261106b"></script>
+<script src="js/16-notes.js?v=20261106b"></script>
+</body>
+</html>
