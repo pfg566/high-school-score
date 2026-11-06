@@ -332,7 +332,7 @@ function twFrame(dt,real,now){
   if (TWC.bub) TWC.bub.visible=TWC.bubbleT>0;
   if (knight){ const A=knight.anim; setBaseSynced(A,TWC.launch>0?'idle':moving?'run':'idle',moving?1.15:1); knight.mixer.update(dt); }
   for (const c of clouds){ c.position.x+=c.userData.v*dt; if (c.position.x>130) c.position.x=-130; }
-  fx.update(dt); updateDreamy(real); qualityTick(now);
+  fx.update(dt); updateCombatFx(dt); updateDreamy(real); qualityTick(now);
   { const o=sun.userData.off||[22,38,14]; sun.position.set(P.x+o[0],o[1],P.z+o[2]); sun.target.position.set(P.x,0,P.z); sun.target.updateMatrixWorld(); }
   const tgt=new THREE.Vector3(P.x,15+TWC.y*.3,P.z+14); camera.position.lerp(tgt,W.snapCam?1:Math.min(1,dt*6)); W.snapCam=false; camera.lookAt(P.x,TWC.y*.3,P.z);
   if (shake>0){ shake=Math.max(0,shake-dt); camera.position.x+=rnd(-1,1)*shake*.6; camera.position.y+=rnd(-1,1)*shake*.6; }
