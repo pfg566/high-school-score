@@ -9,8 +9,8 @@ const TW_BASES=[{x:-17,z:-17},{x:17,z:-17},{x:17,z:17},{x:-17,z:17}], TW_BASE_R=
 const TW_COL=['#e5484d','#3b82f6','#22a35a','#e8a400'], TW_NAME=['빨강 조','파랑 조','초록 조','노랑 조'], TW_EMO=['🔴','🔵','🟢','🟡'];
 const TW_ITEMS={hammer:{e:'🔨',n:'거대 망치'},shoes:{e:'👟',n:'번개 신발'},bubble:{e:'🫧',n:'방패 거품'},tornado:{e:'🌪️',n:'회오리 폭탄'},banana:{e:'🍌',n:'바나나 함정'}};
 /* 직업 역할: 기사 = 거점 지킴이(잘 안 밀림) · 궁수 = 멀리서 약하게 견제 · 마법사 = 범위로 한꺼번에 날려 보내기 */
-const TW_JOB={knight:{cd:.5,scd:5,anim:'slashH',sanim:'stab'},archer:{cd:.6,scd:8,anim:'shoot',sanim:'shoot'},mage:{cd:.95,scd:6,anim:'cast',sanim:'spin'}};
-const TW_ARROW={spd:26,rng:10,p:2,g:5}, TW_ORB={spd:22,rng:10,r:3.4,p:9,g:16}, TW_KNIGHT_ARMOR=.7;
+const TW_JOB={knight:{cd:.5,scd:5,anim:'slashH',sanim:'stab'},archer:{cd:.85,scd:12,anim:'shoot',sanim:'shoot'},mage:{cd:.8,scd:5,anim:'cast',sanim:'spin'}};   // 궁수: 공속·세 갈래 화살 너프 · 마법사: 공속 조금 빠르게
+const TW_ARROW={spd:26,rng:10,p:2,g:5}, TW_ORB={spd:22,rng:10,r:3.4,p:9,g:16,hit:1.15}, TW_KNIGHT_ARMOR=.7;
 const TWC={cid:'',metaRef:null,meta:null,st:null,on:false,joining:false,team:-1,rp:{},refs:[],vx:0,vz:0,g:0,launch:0,lx:0,lz:0,fall:0,y:0,lastHit:null,cd:0,scd:0,item:'',hammer:false,fastT:0,bubbleT:0,slowT:0,slipT:0,boostT:0,
   dash:0,dashHit:{},an:0,ak:0,sendT:0,lastSent:'',traps:{},stats:{ko:0,items:0,out:0},endShown:false,joinAt:0,proj:[],reqT:0,ptV:[],baseV:[],itemV:{},trapV:{},pi:{},feedN:0};
 const twTeamBase=t=>TW_BASES[(TWC.meta&&TWC.meta.nt===2)?[0,2][t]||0:t]||TW_BASES[0];
@@ -183,7 +183,11 @@ function twAttack(){
   if (knight) knight.anim.once(J.anim,JOB==='knight'?2.4:2.6,true);
   twAct(ham?4:1);
   if (JOB==='archer' && !ham){ const m=makeArrow(0); m.rotation.y=Math.atan2(d.x,d.z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+d.x*.6,z:P.z+d.z*.6,y:1.25,vx:d.x*TW_ARROW.spd,vz:d.z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,p:TW_ARROW.p,g:TW_ARROW.g,k:1}); SFX.shoot&&SFX.shoot(); return; }
-  if (JOB==='mage' && !ham){ const m=makeOrb(0xa77bff,false); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+d.x*.7,z:P.z+d.z*.7,y:1.3,vx:d.x*TW_ORB.spd,vz:d.z*TW_ORB.spd,life:TW_ORB.rng/TW_ORB.spd,mine:true,boom:true,r:TW_ORB.r,p:TW_ORB.p,g:TW_ORB.g}); return; }
+  if (JOB==='mage' && !ham){
+    // 바로 앞(2m 안)에 적이 있으면 구슬이 날아가지 않고 그 자리에서 바로 터져요 (붙어 있어도 맞게)
+    let near=null, nd=2.1; for (const R of twEnemies()){ const dx=R.x-P.x, dz=R.z-P.z, dd=Math.hypot(dx,dz); if (dd<nd && (dx*d.x+dz*d.z)/(dd||1)>-.2){ near=R; nd=dd; } }
+    if (near){ const bx=P.x+d.x*Math.min(nd,1.2), bz=P.z+d.z*Math.min(nd,1.2); twOrbBoom(bx,bz,TW_ORB.r,TW_ORB.p,TW_ORB.g,d.x,d.z); return; }
+    const m=makeOrb(0xa77bff,false); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+d.x*.7,z:P.z+d.z*.7,y:1.3,vx:d.x*TW_ORB.spd,vz:d.z*TW_ORB.spd,life:TW_ORB.rng/TW_ORB.spd,mine:true,boom:true,r:TW_ORB.r,p:TW_ORB.p,g:TW_ORB.g}); return; }
   // 근접(기사) 또는 망치
   const rng=ham?3.4:3.2; impactFx(P.x+d.x*1.4,1.1,P.z+d.z*1.4,ham?0xffd34d:0xfff1c4,ham?2.6:1.6); SFX.hit&&SFX.hit();
   for (const R of twEnemies()){ const dx=R.x-P.x, dz=R.z-P.z, dd=Math.hypot(dx,dz); if (dd>rng+.4) continue; if ((dx*d.x+dz*d.z)/(dd||1)<.15) continue; twHitSend(R,dx,dz,ham?12:5,ham?35:10,ham?2:0); }
@@ -193,7 +197,7 @@ function twSkill(){
   const J=TW_JOB[JOB]||TW_JOB.knight, d=twAimDir(); TWC.scd=J.scd; twAct(2);
   if (knight) knight.anim.once(J.sanim,2.2,true);
   if (JOB==='knight'){ TWC.dash=.32; TWC.dashHit={}; TWC.dashDir=d; }
-  else if (JOB==='archer'){ for (const a of [-.22,0,.22]){ const c=Math.cos(a), s=Math.sin(a), x=d.x*c-d.z*s, z=d.x*s+d.z*c; const m=makeArrow(0); m.rotation.y=Math.atan2(x,z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+x*.6,z:P.z+z*.6,y:1.25,vx:x*TW_ARROW.spd,vz:z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,p:3,g:7,k:1}); } }
+  else if (JOB==='archer'){ for (const a of [-.22,0,.22]){ const c=Math.cos(a), s=Math.sin(a), x=d.x*c-d.z*s, z=d.x*s+d.z*c; const m=makeArrow(0); m.rotation.y=Math.atan2(x,z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+x*.6,z:P.z+z*.6,y:1.25,vx:x*TW_ARROW.spd,vz:z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,p:2,g:4,k:1}); } }
   else { fx.shock(P.x,P.z,4.6); for (const R of twEnemies()){ const dx=R.x-P.x, dz=R.z-P.z; if (Math.hypot(dx,dz)<4.8) twHitSend(R,dx,dz,12,22,0); } }
 }
 function twUseItem(){
@@ -255,12 +259,17 @@ function twTick(dt){
   const it=TWC.st&&TWC.st.it; if (it && !TWC.item){ TWC.reqT-=dt; for (const id in it){ const v=it[id]; if (Math.hypot(v[0]-P.x,v[1]-P.z)<1.4 && TWC.reqT<=0){ TWC.reqT=.6; fbDb.ref(`tw/${TWC.cid}/req/${myUid()}`).set({i:id,t:Date.now()}).catch(()=>{}); } } }
   return moving;
 }
+function twSegClosest(px,pz,ax,az,bx,bz){ const vx=bx-ax, vz=bz-az, L=vx*vx+vz*vz; const t=L?Math.max(0,Math.min(1,((px-ax)*vx+(pz-az)*vz)/L)):0; return [ax+vx*t,az+vz*t]; }
+function twSegDist(px,pz,ax,az,bx,bz){ const c=twSegClosest(px,pz,ax,az,bx,bz); return Math.hypot(px-c[0],pz-c[1]); }
+function twOrbBoom(x,z,br,pw,g,vx,vz){ fx.shock(x,z,br); fx.burst(x,1,z,0xa77bff,18,5); SFX.hit&&SFX.hit();
+  for (const R of twEnemies()){ const dx=R.x-x, dz=R.z-z, dd=Math.hypot(dx,dz); if (dd<br) twHitSend(R,dd>.3?dx:(vx||dx||.01),dd>.3?dz:(vz||dz),pw,g,0); } }
 function twProjTick(dt){
   TWC.proj=TWC.proj.filter(p=>{
-    p.x+=p.vx*dt; p.z+=p.vz*dt; p.life-=dt; p.mesh.position.set(p.x,p.y,p.z);
+    const ox=p.x, oz=p.z; p.x+=p.vx*dt; p.z+=p.vz*dt; p.life-=dt; p.mesh.position.set(p.x,p.y,p.z);
     let done=p.life<=0;
-    if (p.mine && !done){ for (const R of twEnemies()){ if (Math.hypot(R.x-p.x,R.z-p.z)<.85){ if (p.boom){ done=true; break; } let kk=p.k|0; if (kk&1){ if (TWC.arT===R.u) TWC.arN=(TWC.arN|0)+1; else { TWC.arT=R.u; TWC.arN=1; } if (TWC.arN<2) kk&=~1; } twHitSend(R,p.vx,p.vz,p.p,p.g,kk); done=true; break; } } }
-    if (done){ if (p.boom){ const br=p.r||3.4; fx.shock(p.x,p.z,br); fx.burst(p.x,1,p.z,0xa77bff,18,5); if (p.mine) for (const R of twEnemies()){ const dx=R.x-p.x, dz=R.z-p.z; if (Math.hypot(dx,dz)<br) twHitSend(R,dx||p.vx,dz||p.vz,p.p,p.g,0); } }
+    // 지나온 길 전체로 맞았는지 봐요 (화면이 느려 한 번에 많이 움직여도 뚫고 지나가지 않게)
+    if (p.mine && !done){ for (const R of twEnemies()){ if (twSegDist(R.x,R.z,ox,oz,p.x,p.z)<(p.boom?TW_ORB.hit:.85)){ if (p.boom){ const c=twSegClosest(R.x,R.z,ox,oz,p.x,p.z); p.x=c[0]; p.z=c[1]; } if (p.boom){ done=true; break; } let kk=p.k|0; if (kk&1){ if (TWC.arT===R.u) TWC.arN=(TWC.arN|0)+1; else { TWC.arT=R.u; TWC.arN=1; } if (TWC.arN<2) kk&=~1; } twHitSend(R,p.vx,p.vz,p.p,p.g,kk); done=true; break; } } }
+    if (done){ if (p.boom){ if (p.mine) twOrbBoom(p.x,p.z,p.r||3.4,p.p,p.g,p.vx,p.vz); else { fx.shock(p.x,p.z,p.r||3.4); fx.burst(p.x,1,p.z,0xa77bff,18,5); } }
       TWC.dyn.remove(p.mesh); return false; }
     return true; });
 }
@@ -317,6 +326,7 @@ function twHUD(){
   else w.hidden=true;
 }
 function twFrame(dt,real,now){
+  if (knight && (knight.anim.dead||endPose)){ knight.anim.revive(); endPose=false; }   // 지난 판에서 쓰러진(누운) 자세가 남지 않게
   if (!W.paused) W.t+=dt;
   lobbyTick(real,dt);
   const m=TWC.meta, running=m&&m.state==='run'&&TWC.st&&!(TWC.st.intro>0)&&!TWC.st.end;
