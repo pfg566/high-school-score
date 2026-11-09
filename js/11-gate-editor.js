@@ -84,7 +84,7 @@ function endGame(win){
   $('#endEyebrow').textContent=win?'승리':tu?'시간 종료':'게임 오버';
   W.won=!!win;
   $('#endTitle').textContent=win?(PEACE_RUN?PEACE_TXT[MAPK].winTitle:MAPS[MAPK].winTitle):tu?'시간이 다 됐어요!':(MAPK==='defense'&&W.door<=0?'성문이 무너졌어요':MAPK==='glacier'&&W.gl&&!glAlive().length?'빙하가 모두 녹았어요':MAPK==='runner'?'하트를 모두 잃었어요':MAPK==='stage'?'목숨을 모두 잃었어요':MAPK==='teamwar'?'아쉬운 패배':'체력이 모두 닳았어요');
-  $('#endMsg').textContent=win?(PEACE_RUN?PEACE_TXT[MAPK].winMsg:MAPS[MAPK].winMsg):tu?(MAPK==='runner'?`${RUN.n}문제 중 ${RUN.done}문제를 지나왔어요. 아래 틀린 문제를 복습해 보세요.`:`${WAVES.length}웨이브 중 ${wc}웨이브를 깼어요. 깬 웨이브마다 100점을 더 받아요. 아래 틀린 문제를 복습해 보세요.`):MAPK==='runner'?'틀린 문제를 다시 읽어 보고 한 번 더 달려 봐요.':MAPK==='stage'?'틀린 문제를 다시 읽어 보고 다음 판에 도전해요.':MAPK==='teamwar'?'잘 싸웠어요! 다음 판에는 조원들과 작전을 짜 봐요.':'퀴즈를 맞히면 회복하거나 더 강해질 수 있어요. 아래 틀린 문제를 복습하고 다시 도전해 보세요.';
+  $('#endMsg').textContent=win?(PEACE_RUN?PEACE_TXT[MAPK].winMsg:MAPS[MAPK].winMsg):tu?(MAPK==='runner'?`${RUN.n}문제 중 ${RUN.done}문제를 지나왔어요. 아래 틀린 문제를 복습해 보세요.`:`${WAVES.length}웨이브 중 ${wc}웨이브를 깼어요. 깬 웨이브는 모드 기록에 더해져요. 아래 틀린 문제를 복습해 보세요.`):MAPK==='runner'?'틀린 문제를 다시 읽어 보고 한 번 더 달려 봐요.':MAPK==='stage'?'틀린 문제를 다시 읽어 보고 다음 판에 도전해요.':MAPK==='teamwar'?'잘 싸웠어요! 다음 판에는 조원들과 작전을 짜 봐요.':'퀴즈를 맞히면 회복하거나 더 강해질 수 있어요. 아래 틀린 문제를 복습하고 다시 도전해 보세요.';
   $('#sKills').textContent=W.kills; $('#sCorrect').textContent=`${W.correct}/${W.asked}`;
   const s=Math.floor(W.t); $('#sTime').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
   const rv=$('#review');
@@ -101,19 +101,32 @@ function endGame(win){
   // 점수는 퀴즈 중심: 정답 · 빠른 정답 · 정답률 보너스가 대부분이고, 몬스터 처치는 조금만
   const spd=Math.round(W.speedPts||0), accK=accBonusK(W.correct,W.asked), quizPts=W.correct*100+fixedN*50+spd, accPts=Math.round(quizPts*accK);
   const rateP=W.asked?Math.round(W.correct/W.asked*100):0;
-  const score=Math.round((quizPts+accPts+W.kills*2+dlv*30+stars*30+gls.pts+(rnb?rnb.pts:0)+(win?300:0)+wc*50+(PARTY.on?PARTY.bonus:0))*(MODE==='hero'?HERO.score:LEVELS[LEVEL].score));
-  $('#sScoreNote').textContent=`정답 100점 · 빠른 정답 +${spd}점 · 다시 맞힘 50점(${fixedN}개) · 정답률 ${rateP}% 보너스 +${Math.round(accK*100)}%(${accPts}점) · 처치 2점`+(MAPK==='island'?` · 배달 30점(${dlv}개)`:'')+(rnb?` · 최고 ${rnb.m}연속×20 + 코인 ${rnb.c}개×2(${rnb.pts}점)`:'')+(MAPK==='glacier'?` · 남은 빙하 ${gls.alive}개×30 + 평균 ${gls.avg}%(${gls.pts}점)`:'')+(stars?` · 별 30점(${stars}개)`:'')+(PEACE_RUN?' · 평화 모드':'')+(PARTY.on?` · 거점 지키기 +${PARTY.bonus}점`:'')+(tu?` · 깬 웨이브 50점(${wc}개)`:' · 승리 300점')+(PARTY.on||MODE==='hero'?' · 영웅 ×1.5':LEVEL!=='normal'?` · ${LEVELS[LEVEL].name} ×${LEVELS[LEVEL].score}`:'');
+  // 공식 점수(랭킹·경험치·선생님 결과): 어느 모드든 같은 기준 = 서로 다른 문제를 맞힌 개수 · 다시 맞힘 · 정답률
+  const uniqN=W.right?W.right.size:0, offBase=uniqN*100+fixedN*50, offAcc=Math.round(offBase*accK), score=offBase+offAcc;
+  // 모드 기록(재미용, 같은 모드끼리만 비교): 처치 · 배달 · 별 · 빙하 · 러너 연속 · 승리 · 웨이브 · 빠른 정답 × 난이도
+  const lvMul=PARTY.on||MODE==='hero'?HERO.score:LEVELS[LEVEL].score;
+  const modePts=Math.round((spd+W.kills*2+dlv*30+stars*30+gls.pts+(rnb?rnb.pts:0)+(win?300:0)+wc*50+(PARTY.on?PARTY.bonus:0))*lvMul);
+  const gm=gameModeId(), prevBest=PROFILE&&PROFILE.mb&&+PROFILE.mb[gm]||0;
+  $('#sScoreNote').textContent=`서로 다른 문제 ${uniqN}개 맞힘 ×100 · 다시 맞힘 ${fixedN}개 ×50 · 정답률 ${rateP}% 보너스 +${Math.round(accK*100)}%(${offAcc}점) · 같은 문제는 한 번만 세요`;
+  const mparts=[]; if (spd) mparts.push(`빠른 정답 +${spd}`); if (W.kills) mparts.push(`처치 ${W.kills}×2`);
+  if (MAPK==='island') mparts.push(`배달 ${dlv}×30`); if (stars) mparts.push(`별 ${stars}×30`); if (rnb) mparts.push(`최고 ${rnb.m}연속×20 + 코인 ${rnb.c}×2`);
+  if (MAPK==='glacier') mparts.push(`빙하 ${gls.pts}`); if (PARTY.on) mparts.push(`거점 +${PARTY.bonus}`); if (tu&&wc) mparts.push(`깬 웨이브 ${wc}×50`); if (win) mparts.push('승리 300');
+  if (lvMul!==1) mparts.push(`${PARTY.on||MODE==='hero'?'영웅':LEVELS[LEVEL].name} ×${lvMul}`);
+  const isNew=!!PROFILE&&modePts>prevBest&&modePts>0;
+  $('#sMode').innerHTML=`<div class="mb-top"><span>${modeIcon(gm)} ${esc(modeName(gm))} 모드 기록</span><b>${modePts.toLocaleString('ko-KR')}</b>${isNew?'<em class="mb-new">🎉 새 기록!</em>':prevBest?`<small>내 최고 ${prevBest.toLocaleString('ko-KR')}</small>`:''}</div><small class="mb-note">${mparts.join(' · ')} · 모드 기록은 같은 모드끼리만 비교해요</small>`;
+  $('#sMode').hidden=false;
   if (MAPK==='island'&&W.isl) $('#endMsg').textContent=`택배 ${W.isl.delivered}개 배달`+(stars?` · 제시간 배달 ★${stars}`:'')+(W.isl.lost?` · 도둑에게 ${W.isl.lost}개 잃어버림`:'')+'. '+$('#endMsg').textContent;
   const newSkill=PARTY.on||tu?loadSkill():updateSkill(win);
   const d=new Date();
   const when=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   lastResult={diff:DIFF,mode:MODE,lv:PARTY.on?'hero':LEVEL,nick:NICK,cls:CI.cls,cid:CI.cid,sch:CI.sch,grade:CI.grade,year:CI.year,label:CI.label,unit:unit?unit.name:'',unitId:playUnit,win,score,correct:W.correct,asked:W.asked,kills:W.kills,sp:spd,acc:accK,
     time:$('#sTime').textContent,timeSec:s,when,wrong:W.wrong.filter(w=>!w.fixed).map(w=>w.item.q),
-    job:JOB+(JOB==='mage'?':'+MELEM:''),map:MAPK,ease:easeIdx(),cs:combatStats()};
+    job:JOB+(JOB==='mage'?':'+MELEM:''),map:MAPK,ease:easeIdx(),cs:combatStats(),uniq:uniqN,mp:modePts,gm};
   $('#endWho').textContent=`${CI.label} ${NICK} · ${lastResult.unit} · ${when}`;
   saveResult(lastResult);
   try{ boardWrite(lastResult); }catch(e){}
   try{ notesWrite(); }catch(e){}
+  try{ $('#sDex').hidden=true; dexWrite(); }catch(e){}
   grantRewards({...lastResult,newSkill},fixedN);
   $('#sScore').textContent=score;
   $('#copyStatus').textContent=''; $('#copyText').hidden=true;
@@ -197,39 +210,81 @@ let FREE_PLAY=false, PLAYMAP=null, PICK={};
 try{ PICK=JSON.parse(localStorage.getItem('gsd-pick')||'{}')||{}; }catch(e){ PICK={}; }
 const MAP_ORDER=['zones','general','defense','island','glacier','runner'];
 const mapOK=(u,k)=>!!(u&&MAPS[k]&&MAPS[k].need.every(t=>u.bank[t]&&u.bank[t].length>0));
+/* 게임 모드: 학생이 전투(왼쪽) · 평화(오른쪽) 중에서 자유롭게 골라요. 선생님이 정한 맵은 ⭐ 추천으로 보여요 (파티 · 조별 점령전 · 발판은 따로) */
+const PLAY_MODES=[
+ {id:'zones',  map:'zones',  peace:false,side:'battle',icon:'🏢',name:'세 거점',     sub:'몬스터 사냥 · 거점 퀴즈'},
+ {id:'general',map:'general',peace:false,side:'battle',icon:'🌾',name:'들판 마을',   sub:'몬스터 사냥'},
+ {id:'glacier',map:'glacier',peace:false,side:'battle',icon:'🧊',name:'녹는 빙하',   sub:'빙하 지키며 사냥'},
+ {id:'defense',map:'defense',peace:false,side:'battle',icon:'🏰',name:'성벽 디펜스', sub:'성문 지키기'},
+ {id:'island', map:'island', peace:false,side:'battle',icon:'🏝️',name:'서비스업 섬', sub:'배달 + 도둑 해골'},
+ {id:'island-p',map:'island',peace:true, side:'peace', icon:'📦',name:'택배 배달',   sub:'몬스터 없이 배달만'},
+ {id:'runner', map:'runner', peace:false,side:'peace', icon:'🏃',name:'정답 러너',   sub:'달리며 정답 문 통과'},
+ {id:'defense-p',map:'defense',peace:true,side:'peace',icon:'🗼',name:'성 지휘관',   sub:'퀴즈로 포탑 지휘'},
+];
+const MODE_EXTRA={party:{icon:'🎉',name:'파티'},stage:{icon:'🟩',name:'발판 서바이벌'},teamwar:{icon:'🚩',name:'조별 점령전'}};
+const modeName=id=>(PLAY_MODES.find(x=>x.id===id)||MODE_EXTRA[id]||{name:(MAPS[id]&&MAPS[id].name)||id}).name;
+const modeIcon=id=>(PLAY_MODES.find(x=>x.id===id)||MODE_EXTRA[id]||{icon:'🎮'}).icon;
+function gameModeId(){ if (PARTY&&PARTY.on) return 'party'; if (MAPK==='stage'||MAPK==='teamwar') return MAPK; return PEACE_RUN&&PEACE_MAPS.includes(MAPK)?MAPK+'-p':MAPK; }
+/* 모드 탐험 보너스: 이번 주(월요일 시작)에 처음 해 보는 모드에서 문제를 5개 이상 풀면 코인 + */
+const EXPLORE_COINS=60, EXPLORE_MIN_Q=5;
+function weekKey(){ const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()-((t.getDay()+6)%7)); return `${t.getFullYear()}${String(t.getMonth()+1).padStart(2,'0')}${String(t.getDate()).padStart(2,'0')}`; }
+function exploredModes(){ const mw=PROFILE&&PROFILE.mw; return mw&&mw.w===weekKey()&&mw.m?String(mw.m).split(',').filter(Boolean):[]; }
+let LAST_PLAYC=null;
+function refreshModeBadges(){ try{ if (LAST_PLAYC && W.state!=='play') renderPlayModes(LAST_PLAYC); }catch(e){} }
+let MODE_PICK=''; try{ MODE_PICK=localStorage.getItem('gsd-mode')||''; }catch(e){}
+const modeById=id=>PLAY_MODES.find(x=>x.id===id);
 function playChoice(){
   const byId=id=>DATA.units.find(u=>u.id===id), ready=DATA.units.filter(isReady);
   const def=()=>{ const u=byId(DATA.active)&&isReady(byId(DATA.active))?byId(DATA.active):ready[0]||DATA.units[0]; return u; };
-  if (isAdmin || FREE_PLAY){ let u=byId(PICK.unit); if (!u||!isReady(u)) u=def(); return {u,m:mapOK(u,PICK.map)?PICK.map:mapOf(u),free:true,src:FREE_PLAY?'free':'admin'}; }
-  const g=activeGate(), raw=g&&GATE[g.key];
-  if (raw && raw.unit){ const u=byId(raw.unit); if (u&&isReady(u)) return {u,m:mapOK(u,raw.map)?raw.map:mapOf(u),free:false,src:'gate'}; }
-  const u=def(); return {u,m:mapOf(u),free:false,src:'default'};
+  let c;
+  if (isAdmin || FREE_PLAY){ let u=byId(PICK.unit); if (!u||!isReady(u)) u=def(); c={u,rec:mapOf(u),free:true,src:FREE_PLAY?'free':'admin'}; }
+  else { const g=activeGate(), raw=g&&GATE[g.key];
+    if (raw && raw.unit && byId(raw.unit) && isReady(byId(raw.unit))){ const u=byId(raw.unit); c={u,rec:mapOK(u,raw.map)?raw.map:mapOf(u),free:false,src:'gate'}; }
+    else { const u=def(); c={u,rec:mapOf(u),free:false,src:'default'}; } }
+  let md=modeById(MODE_PICK); if (!md||!c.u||!mapOK(c.u,md.map)) md=modeById(c.rec)||PLAY_MODES[1];
+  c.mode=md; c.m=md.map; return c;
 }
 function applyPlay(){
   if (!DATA||!DATA.units||!DATA.units.length) return;
   const c=playChoice(); if (!c.u) return;
   if (c.u.id!==playUnit) useUnit(c.u.id);
+  PEACE=!!c.mode.peace;
   PLAYMAP=c.m; if (W.state!=='play' && MAPK!==c.m) setMap(c.m);
-  $('#unitEyebrow').innerHTML=`${esc(c.u.name)}<span class="mapname">${MAPS[c.m].name}</span>`;
-  renderUnitPicker(c); updateBankInfo(); refreshStyle();
+  $('#unitEyebrow').innerHTML=`${esc(c.u.name)}<span class="mapname">${c.mode.peace?c.mode.name:MAPS[c.m].name}</span>`;
+  LAST_PLAYC=c; renderUnitPicker(c); renderPlayModes(c); updateBankInfo(); refreshStyle();
 }
+function renderPlayModes(c){
+  const stu=!!(STUDENT&&PROFILE), ex=stu?exploredModes():[], mb=stu&&PROFILE.mb||{};
+  const card=md=>{ const ok=mapOK(c.u,md.map), on=md===c.mode, rec=md.map===c.rec&&!md.peace, fresh=stu&&ok&&!ex.includes(md.id), best=+mb[md.id]||0;
+    return `<button type="button" class="pm-btn${on?' on':''}${fresh?' fresh':''}" data-gmode="${md.id}" aria-pressed="${on}"${ok?'':' disabled title="이 단원에는 이 모드에 필요한 문제가 없어요"'}>${fresh?`<em class="pm-gift" title="이번 주 처음 하는 모드예요. 문제를 ${EXPLORE_MIN_Q}개 이상 풀면 코인 +${EXPLORE_COINS}">🎁+${EXPLORE_COINS}</em>`:''}<i>${md.icon}</i><span><b>${md.name}${rec?' <em>⭐ 추천</em>':''}</b><small>${md.sub}</small>${best?`<small class="pm-best">🏅 내 기록 ${best.toLocaleString('ko-KR')}</small>`:''}</span></button>`; };
+  const vis=PLAY_MODES.filter(m=>m.side!=='battle'||mapOK(c.u,m.map)||m.map!=='zones');
+  $('#pmBattle').innerHTML=vis.filter(m=>m.side==='battle').map(card).join('');
+  $('#pmPeace').innerHTML=vis.filter(m=>m.side==='peace').map(card).join('');
+  const okModes=vis.filter(m=>mapOK(c.u,m.map)), done=okModes.filter(m=>ex.includes(m.id)).length, pe=$('#pmExplore');
+  pe.hidden=!stu;
+  if (stu) pe.innerHTML=done>=okModes.length?`🧭 이번 주 탐험 완료 <b>${done}/${okModes.length}</b> · 월요일에 🎁가 다시 생겨요`:`🧭 이번 주 탐험 <b>${done}/${okModes.length}</b> · 🎁 모드 처음 하면 <b>+${EXPLORE_COINS}코인</b> <small>(문제 ${EXPLORE_MIN_Q}개↑)</small>`;
+}
+$('#playModes').addEventListener('click',e=>{ const b=e.target.closest('[data-gmode]'); if (!b||b.disabled||W.state==='play') return;
+  MODE_PICK=b.dataset.gmode; try{ localStorage.setItem('gsd-mode',MODE_PICK); }catch(_){}
+  const md=modeById(MODE_PICK); PICK.map=md.map; try{ localStorage.setItem('gsd-pick',JSON.stringify(PICK)); }catch(_){}
+  applyPlay(); });
 function refreshStyle(){
-  const ok=PEACE_MAPS.includes(MAPK), on=ok&&PEACE, M=MAPS[MAPK], T=PEACE_TXT[MAPK];
-  $('#stylePick').hidden=!ok;
-  $('#stylePick').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.style==='peace')===on)));
+  const on=PEACE_MAPS.includes(MAPK)&&PEACE, M=MAPS[MAPK], T=PEACE_TXT[MAPK];
+  $('#stylePick').hidden=true;
   $('#mapDesc').textContent=on?T.desc:M.desc;
-  $('#mapRules').innerHTML=(on?T.rules:M.rules).concat([on?'<b>조작:</b> WASD 이동 · Shift 구르기(기사는 막기) · 공격 버튼은 쓰지 않아요':'<b>조작:</b> 스페이스 연타 = 3단 콤보(마지막 타가 가장 세요) · Shift = 구르기(잠깐 무적) · E = 회전 베기(8초마다)']).map(r=>`<li>${r}</li>`).join('');
+  $('#mapRules').innerHTML=(on?T.rules:M.rules).concat([on?'<b>조작:</b> WASD 이동 · Shift 구르기(기사는 막기) · 공격 버튼은 쓰지 않아요':MAPK==='runner'?'':'<b>조작:</b> 스페이스 연타 = 3단 콤보(마지막 타가 가장 세요) · Shift = 구르기(잠깐 무적) · E = 회전 베기(8초마다)']).filter(Boolean).map(r=>`<li>${r}</li>`).join('');
 }
 $('#stylePick').addEventListener('click',e=>{ const b=e.target.closest('[data-style]'); if (!b) return; PEACE=b.dataset.style==='peace'; try{ localStorage.setItem('gsd-peace',PEACE?'1':'0'); }catch(_){} refreshStyle(); });
 function renderUnitPicker(c){
   c=c||playChoice(); if (!c||!c.u) return;
   const ready=DATA.units.filter(isReady);
-  $('#unitPick').hidden=!c.free||ready.length<2; $('#mapPick').hidden=!c.free;
+  $('#unitPick').hidden=!c.free||ready.length<2; $('#mapPick').hidden=true;
   $('#unitSelect').innerHTML=ready.map(u=>`<option value="${esc(u.id)}"${u.id===c.u.id?' selected':''}>${esc(u.name)}${u.id===DATA.active?' (수업 단원)':''}</option>`).join('');
   $('#mapSelect').innerHTML=MAP_ORDER.filter(k=>mapOK(c.u,k)).map(k=>`<option value="${k}"${k===c.m?' selected':''}>${MAPS[k].name}</option>`).join('');
-  $('#ppLock').textContent=c.src==='gate'?'🔒 선생님이 정한 단원과 맵이에요':c.src==='default'?'🔒 선생님이 정한 수업 단원이에요':c.src==='admin'?'⚙️ 선생님 계정이라 단원과 맵을 바꿀 수 있어요':'🗺️ 자유 플레이: 단원과 맵을 골라 보세요';
+  $('#ppLock').hidden=!c.free;
+  $('#ppLock').textContent=c.src==='admin'?'⚙️ 선생님 계정이라 단원도 바꿀 수 있어요 · 아래에서 모드를 골라요':c.src==='free'?'🗺️ 자유 플레이: 단원과 모드를 골라 보세요':'🎮 단원은 선생님이 정해요 · 아래에서 하고 싶은 모드를 골라요';
 }
-$('#mapSelect').addEventListener('change',e=>{ PICK.map=e.target.value; try{ localStorage.setItem('gsd-pick',JSON.stringify(PICK)); }catch(_){} applyPlay(); });
+$('#mapSelect').addEventListener('change',e=>{ PICK.map=e.target.value; MODE_PICK=e.target.value; try{ localStorage.setItem('gsd-pick',JSON.stringify(PICK)); }catch(_){} applyPlay(); });
 function updateBankInfo(){
   $('#bankInfo').textContent= MAPK==='zones' ? `문제 ${MC.length+LOC.length+OX.length+CLS.length}개 · 4지선다 ${MC.length} · 위치 ${LOC.length} · O/X ${OX.length} · 분류 ${CLS.length}` : `문제 ${MC.length+OX.length}개 · 4지선다 ${MC.length} · O/X ${OX.length}`;
 }
@@ -309,7 +364,10 @@ function openEditor(){
   renderEditor(); $('#title').hidden=true; $('#editor').hidden=false;
 }
 $('#editBtn').addEventListener('click',openEditor);
-$('#edClose').addEventListener('click',()=>{ $('#editor').hidden=true; $('#title').hidden=false; });
+$('#edClose').addEventListener('click',()=>{
+  // 결과판에서 연 문제 관리 탭이면 탭을 닫고 결과판으로 돌아가요 (닫히지 않으면 게임 첫 화면을 보여 줘요)
+  if (typeof EDIT_MODE!=='undefined' && EDIT_MODE && document.body.classList.contains('editmode')){ try{ window.close(); }catch(e){} document.body.classList.remove('editmode'); }
+  $('#editor').hidden=true; $('#title').hidden=false; });
 $('#edTabs').addEventListener('click',e=>{ const b=e.target.closest('[data-tab]'); if (!b) return; edTab=b.dataset.tab; renderEditor(); });
 $('#edList').addEventListener('input',e=>{
   const el=e.target, i=+el.dataset.i, f=el.dataset.f; if (!f) return;
@@ -469,3 +527,34 @@ $('#edSave').addEventListener('click',async()=>{
   }finally{ btn.disabled=false; }
 });
 
+
+/* ---------- 게임 중간에 나가기 (모든 모드) ----------
+   오른쪽 아래 🚪 나가기 또는 Esc → 확인 창 → 지금까지 푼 문제로 '중간에 나옴' 결과를 저장하고 결과 화면으로 */
+const QUIT={wasPaused:false,solo:false};
+const isMultiMode=()=>!!(PARTY&&PARTY.on)||MAPK==='teamwar'||MAPK==='stage';
+function quitOpen(){
+  if (W.state!=='play' || !$('#quitPop').hidden) return;
+  QUIT.solo=!isMultiMode(); QUIT.wasPaused=W.paused;
+  if (QUIT.solo){ W.paused=true; for (const k in keys) keys[k]=false; }      // 혼자 하는 판은 잠깐 멈춰요 (함께 하는 판은 계속 진행돼요)
+  $('#quitMsg').textContent=isMultiMode()?'함께 하는 게임이라 화면은 멈추지 않아요. 나가면 이번 판에서 빠지고, 지금까지 푼 문제는 \'중간에 나옴\'으로 기록돼요.':'지금까지 푼 문제와 점수는 \'중간에 나옴\'으로 기록돼요.';
+  $('#quitPop').hidden=false; setTimeout(()=>$('#quitNo').focus(),0);
+}
+function quitClose(){ if ($('#quitPop').hidden) return; $('#quitPop').hidden=true; if (QUIT.solo && W.state==='play') W.paused=QUIT.wasPaused; try{ canvas.focus({preventScroll:true}); }catch(e){} }
+function quitGame(){
+  $('#quitPop').hidden=true; if (W.state!=='play') return;
+  ['#quiz','#lvUp','#reviveIntro','#prep','#locIntro'].forEach(q=>{ const e=$(q); if (e) e.hidden=true; });
+  Q.answered=true; Q.item=null; W.paused=false; P.down=false; if (knight && knight.anim.dead) knight.anim.revive();
+  if (PARTY&&PARTY.on){ partyEnd(false,'quit',0); }
+  else { endGame(false); $('#endTitle').textContent='중간에 나왔어요'; $('#endMsg').textContent='지금까지 푼 문제는 기록됐어요. 아래 틀린 문제를 한 번 더 읽어 보고 마무리해요.'; }
+  $('#endEyebrow').textContent='중간에 나옴';
+}
+$('#quitBtn').addEventListener('click',quitOpen);
+$('#quitNo').addEventListener('click',quitClose);
+$('#quitYes').addEventListener('click',quitGame);
+$('#quitPop').addEventListener('click',e=>{ if (e.target.id==='quitPop') quitClose(); });
+addEventListener('keydown',e=>{
+  if (e.key!=='Escape' || W.state!=='play') return;
+  if (!$('#quitPop').hidden){ quitClose(); e.preventDefault(); return; }
+  quitOpen(); e.preventDefault();
+});
+setInterval(()=>{ const b=$('#quitBtn'); const show=W.state==='play'; if (b.hidden===show) b.hidden=!show; if (!show && !$('#quitPop').hidden) $('#quitPop').hidden=true; },300);

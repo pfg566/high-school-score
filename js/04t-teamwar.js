@@ -247,6 +247,7 @@ function twTick(dt){
   const L=Math.hypot(ix,iz); let moving=false;
   const spd=7.2*(TWC.fastT>0?1.6:1)*(TWC.boostT>0?1.3:1)*(TWC.slowT>0?.55:1);
   if (L>.12){ if (L>1){ ix/=L; iz/=L; } P.x+=ix*spd*dt; P.z+=iz*spd*dt; if (!mouseAiming()&&!kbAimDir()){ P.fx=ix; P.fz=iz; } moving=true; }
+  if (TWC.dash<=0 && mouseAiming() && !kbAimDir()){ const md=mouseAimDir(); if (md){ P.fx=md.x; P.fz=md.z; } }   // 마우스 방향 보기 (360도)
   if (TWC.dash>0){ TWC.dash-=dt; const d=TWC.dashDir; P.x+=d.x*19*dt; P.z+=d.z*19*dt; for (const R of twEnemies()){ if (TWC.dashHit[R.u]) continue; if (Math.hypot(R.x-P.x,R.z-P.z)<1.7){ TWC.dashHit[R.u]=1; twHitSend(R,R.x-P.x+d.x,R.z-P.z+d.z,12,16,0); } } }
   // 밀림 속도
   P.x+=TWC.vx*dt; P.z+=TWC.vz*dt; const fr=Math.exp(-(TWC.slipT>0?1.2:5)*dt); TWC.vx*=fr; TWC.vz*=fr;
