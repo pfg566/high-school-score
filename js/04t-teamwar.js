@@ -10,7 +10,9 @@ const TW_COL=['#e5484d','#3b82f6','#22a35a','#e8a400'], TW_NAME=['빨강 조','�
 const TW_ITEMS={hammer:{e:'🔨',n:'거대 망치'},shoes:{e:'👟',n:'번개 신발'},bubble:{e:'🫧',n:'방패 거품'},tornado:{e:'🌪️',n:'회오리 폭탄'},banana:{e:'🍌',n:'바나나 함정'}};
 /* 직업 역할: 기사 = 거점 지킴이(잘 안 밀림) · 궁수 = 멀리서 약하게 견제 · 마법사 = 범위로 한꺼번에 날려 보내기 */
 const TW_JOB={knight:{cd:.5,scd:5,anim:'slashH',sanim:'stab'},archer:{cd:.85,scd:12,anim:'shoot',sanim:'shoot'},mage:{cd:.8,scd:5,anim:'cast',sanim:'spin'}};   // 궁수: 공속·세 갈래 화살 너프 · 마법사: 공속 조금 빠르게
-const TW_ARROW={spd:26,rng:10,p:2,g:5}, TW_ORB={spd:22,rng:10,r:3.4,p:9,g:16,hit:1.15}, TW_KNIGHT_ARMOR=.7;
+const TW_ARROW={spd:26,rng:10,p:2,g:5,miss:.25},   // 궁수 화살은 4발 중 1발꼴로 빗나가요(MISS)
+     TW_MISS_FX=(x,z)=>fx.num(x,3.4,z,'MISS','#d6dde8',1.35);
+const TW_ORB={spd:22,rng:10,r:3.4,p:9,g:16,hit:1.15}, TW_KNIGHT_ARMOR=.7;
 const TWC={cid:'',metaRef:null,meta:null,st:null,on:false,joining:false,team:-1,rp:{},refs:[],vx:0,vz:0,g:0,launch:0,lx:0,lz:0,fall:0,y:0,lastHit:null,cd:0,scd:0,item:'',hammer:false,fastT:0,bubbleT:0,slowT:0,slipT:0,boostT:0,
   dash:0,dashHit:{},an:0,ak:0,sendT:0,lastSent:'',traps:{},stats:{ko:0,items:0,out:0},endShown:false,joinAt:0,proj:[],reqT:0,ptV:[],baseV:[],itemV:{},trapV:{},pi:{},feedN:0};
 const twTeamBase=t=>TW_BASES[(TWC.meta&&TWC.meta.nt===2)?[0,2][t]||0:t]||TW_BASES[0];
@@ -152,6 +154,7 @@ function twRemoteFx(R,k){
 }
 /* ---------- 맞았을 때 ---------- */
 function twGotHit(h){
+  if (h.k&8){ TW_MISS_FX(P.x,P.z); return; }   // 궁수 화살이 빗나감: 나에게도 MISS가 보여요
   if (TWC.launch>0||TWC.fall>0||TWC.bubbleT>0||TWC.dash>0) return;
   const armor=JOB==='knight'?TW_KNIGHT_ARMOR:1;   // 기사는 무거운 갑옷: 덜 밀리고 게이지도 덜 차요
   const dx=(h.x||0)/100, dz=(h.z||0)/100, L=Math.hypot(dx,dz)||1;
@@ -182,7 +185,7 @@ function twAttack(){
   const ham=TWC.hammer; if (ham){ TWC.hammer=false; }
   if (knight) knight.anim.once(J.anim,JOB==='knight'?2.4:2.6,true);
   twAct(ham?4:1);
-  if (JOB==='archer' && !ham){ const m=makeArrow(0); m.rotation.y=Math.atan2(d.x,d.z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+d.x*.6,z:P.z+d.z*.6,y:1.25,vx:d.x*TW_ARROW.spd,vz:d.z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,p:TW_ARROW.p,g:TW_ARROW.g,k:1}); SFX.shoot&&SFX.shoot(); return; }
+  if (JOB==='archer' && !ham){ const m=makeArrow(0); m.rotation.y=Math.atan2(d.x,d.z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+d.x*.6,z:P.z+d.z*.6,y:1.25,vx:d.x*TW_ARROW.spd,vz:d.z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,arrow:true,p:TW_ARROW.p,g:TW_ARROW.g,k:1}); SFX.shoot&&SFX.shoot(); return; }
   if (JOB==='mage' && !ham){
     // 바로 앞(2m 안)에 적이 있으면 구슬이 날아가지 않고 그 자리에서 바로 터져요 (붙어 있어도 맞게)
     let near=null, nd=2.1; for (const R of twEnemies()){ const dx=R.x-P.x, dz=R.z-P.z, dd=Math.hypot(dx,dz); if (dd<nd && (dx*d.x+dz*d.z)/(dd||1)>-.2){ near=R; nd=dd; } }
@@ -197,7 +200,7 @@ function twSkill(){
   const J=TW_JOB[JOB]||TW_JOB.knight, d=twAimDir(); TWC.scd=J.scd; twAct(2);
   if (knight) knight.anim.once(J.sanim,2.2,true);
   if (JOB==='knight'){ TWC.dash=.32; TWC.dashHit={}; TWC.dashDir=d; }
-  else if (JOB==='archer'){ for (const a of [-.22,0,.22]){ const c=Math.cos(a), s=Math.sin(a), x=d.x*c-d.z*s, z=d.x*s+d.z*c; const m=makeArrow(0); m.rotation.y=Math.atan2(x,z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+x*.6,z:P.z+z*.6,y:1.25,vx:x*TW_ARROW.spd,vz:z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,p:2,g:4,k:1}); } }
+  else if (JOB==='archer'){ for (const a of [-.22,0,.22]){ const c=Math.cos(a), s=Math.sin(a), x=d.x*c-d.z*s, z=d.x*s+d.z*c; const m=makeArrow(0); m.rotation.y=Math.atan2(x,z); TWC.dyn.add(m); TWC.proj.push({mesh:m,x:P.x+x*.6,z:P.z+z*.6,y:1.25,vx:x*TW_ARROW.spd,vz:z*TW_ARROW.spd,life:TW_ARROW.rng/TW_ARROW.spd,mine:true,arrow:true,p:2,g:4,k:1}); } }
   else { fx.shock(P.x,P.z,4.6); for (const R of twEnemies()){ const dx=R.x-P.x, dz=R.z-P.z; if (Math.hypot(dx,dz)<4.8) twHitSend(R,dx,dz,12,22,0); } }
 }
 function twUseItem(){
@@ -268,7 +271,9 @@ function twProjTick(dt){
     const ox=p.x, oz=p.z; p.x+=p.vx*dt; p.z+=p.vz*dt; p.life-=dt; p.mesh.position.set(p.x,p.y,p.z);
     let done=p.life<=0;
     // 지나온 길 전체로 맞았는지 봐요 (화면이 느려 한 번에 많이 움직여도 뚫고 지나가지 않게)
-    if (p.mine && !done){ for (const R of twEnemies()){ if (twSegDist(R.x,R.z,ox,oz,p.x,p.z)<(p.boom?TW_ORB.hit:.85)){ if (p.boom){ const c=twSegClosest(R.x,R.z,ox,oz,p.x,p.z); p.x=c[0]; p.z=c[1]; } if (p.boom){ done=true; break; } let kk=p.k|0; if (kk&1){ if (TWC.arT===R.u) TWC.arN=(TWC.arN|0)+1; else { TWC.arT=R.u; TWC.arN=1; } if (TWC.arN<2) kk&=~1; } twHitSend(R,p.vx,p.vz,p.p,p.g,kk); done=true; break; } } }
+    if (p.mine && !done){ for (const R of twEnemies()){ if (twSegDist(R.x,R.z,ox,oz,p.x,p.z)<(p.boom?TW_ORB.hit:.85)){
+        if (!p.boom && p.arrow){ if (p.passed&&p.passed[R.u]) continue;
+          if (Math.random()<TW_ARROW.miss){ (p.passed=p.passed||{})[R.u]=1; TW_MISS_FX(R.x,R.z); fbDb.ref(`tw/${TWC.cid}/hit/${R.u}`).push({x:0,z:0,p:0,g:0,f:myUid(),k:8}).catch(()=>{}); continue; } } if (p.boom){ const c=twSegClosest(R.x,R.z,ox,oz,p.x,p.z); p.x=c[0]; p.z=c[1]; } if (p.boom){ done=true; break; } let kk=p.k|0; if (kk&1){ if (TWC.arT===R.u) TWC.arN=(TWC.arN|0)+1; else { TWC.arT=R.u; TWC.arN=1; } if (TWC.arN<2) kk&=~1; } twHitSend(R,p.vx,p.vz,p.p,p.g,kk); done=true; break; } } }
     if (done){ if (p.boom){ if (p.mine) twOrbBoom(p.x,p.z,p.r||3.4,p.p,p.g,p.vx,p.vz); else { fx.shock(p.x,p.z,p.r||3.4); fx.burst(p.x,1,p.z,0xa77bff,18,5); } }
       TWC.dyn.remove(p.mesh); return false; }
     return true; });
