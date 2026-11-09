@@ -558,3 +558,4 @@ addEventListener('keydown',e=>{
   quitOpen(); e.preventDefault();
 });
 setInterval(()=>{ const b=$('#quitBtn'); const show=W.state==='play'; if (b.hidden===show) b.hidden=!show; if (!show && !$('#quitPop').hidden) $('#quitPop').hidden=true; },300);
+addEventListener('dragstart',e=>{ if (!(e.target.closest&&e.target.closest('input,textarea,#editor'))) e.preventDefault(); });

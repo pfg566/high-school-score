@@ -235,11 +235,11 @@ function clearProj(){ PROJ.forEach(p=>scene.remove(p.mesh)); PROJ=[]; ZONEFX.for
 
 /* 직업별 공격 */
 function jobAttack(){
-  if (P.atkCd>0){ if (P.atkCd<.18) P.buffer=true; return; }
+  if (P.atkCd>0){ if (P.atkCd<.12) P.buffer=true; return; }
   P.buffer=false; P.lastAtk=W.t;
   if (JOB==='archer'){
-    P.atkCd=.3; archerAim(ARROW_RANGE); const ang=Math.atan2(P.fx,P.fz);
-    knightAttackAnim('shoot',3.4); SFX.zap(); shootArrow(ang,{dmg:22});
+    P.atkCd=.55; archerAim(ARROW_RANGE); const ang=Math.atan2(P.fx,P.fz);   // 연사 너프: 0.3초 → 0.55초 (클릭을 빨리 눌러도 이 간격보다 빨리 안 나가요)
+    knightAttackAnim('shoot',3.4); SFX.zap(); shootArrow(ang,{dmg:26});
   } else {
     P.atkCd=.8; P.castT=.3; aimAt(MAGE_AIM); const ang=Math.atan2(P.fx,P.fz);
     knightAttackAnim('cast',2.2); SFX.zap(); castOrb(ang);
@@ -481,6 +481,9 @@ function updateSkillHUD(){
 function hitMob(m,dmg,sx,sz,kbk,col,byPlayer,o){
   o=o||{};
   if (PARTY.on && !PARTY.host && m.net) return partyClientHit(m,dmg,sx,sz,kbk,col,byPlayer,o);
+  if (m.ans && !o.by){ // 정답 몬스터: 포탑에는 안 맞고, 내가 가까이 있을 때만 맞아요
+    if (o.src==='turret') return false;
+    if (Math.hypot(P.x-m.x,P.z-m.z)>AM_NEAR){ if (!m.farT||W.t-m.farT>1){ m.farT=W.t; fx.num(m.x,3.2,m.z,'더 가까이!','#ffe08a',1.1); } return false; } }
   const dx=m.x-sx, dz=m.z-sz, d=Math.hypot(dx,dz)||1, hy=m.boss?2.4:1.1;
   const k=(m.boss?3:7)*kbk; m.kbx=dx/d*k; m.kbz=dz/d*k;
   if (m.shield>0){ if (byPlayer){ flashPrompt('보호막! 퀴즈를 맞혀야 깰 수 있어요',1.5); SFX.block(); } fx.burst(m.x,2.4,m.z,0x5cc8f0,8,4); fx.num(m.x,5,m.z,'막힘','#9fe3ff'); return false; }

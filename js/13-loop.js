@@ -53,6 +53,10 @@ function frame(now){
       if (m.ranged){ rangedAI(m,dt); continue; }
       if (m.stun>0){ if (m.aimT>0){ m.aimT=0; if (m.aimLine) m.aimLine.visible=false; } m.stun-=dt; m.x+=m.kbx*dt; m.z+=m.kbz*dt; m.kbx*=Math.pow(.02,dt); m.kbz*=Math.pow(.02,dt); resolve(m,m.r);
         m.flash=Math.max(0,m.flash-dt); m.mat.emissive.setHex(m.flash>0?0xffffff:0x000000); continue; }
+      if (m.hold){ // 정답 몬스터: 제자리에 서서 나를 바라보고, 밀려나면 천천히 제자리로 돌아가요
+        const hx=m.hold.x-m.x, hz=m.hold.z-m.z, hd=Math.hypot(hx,hz); if (hd>.3){ const v=Math.min(hd,2.2*dt); m.x+=hx/hd*v; m.z+=hz/hd*v; }
+        m.g.rotation.y=Math.atan2(P.x-m.x,P.z-m.z); m.flash=Math.max(0,m.flash-dt); m.mat.emissive.setHex(m.flash>0?0xffffff:0x000000);
+        if (m.anim) m.anim.setBase(hd>.3?'run':'idle',.8); resolve(m,m.r); continue; }
       if (MAPK==='island' && m.def && m.def.thief && thiefAI(m,dt)) continue;
       if (m.leaper && leapAI(m,dt)) continue;
       const pdx=P.x-m.x, pdz=P.z-m.z, pd=Math.hypot(pdx,pdz)||1;
@@ -99,7 +103,7 @@ function frame(now){
     }
     mobs=mobs.filter(m=>{ if (m.dying===0){ removeMob(m); return false; } return true; });
     if (MAPK==='defense'){ updateTurrets(dt); updateBolts(dt); }
-    islandTick(dt); glacierTick(dt);
+    islandTick(dt); glacierTick(dt); funTick(dt);
 
     // 웨이브 진행 · 잠금
     if (W.nextWaveAt>=0 && W.t>=W.nextWaveAt) startWave(W.wave+1);
@@ -150,6 +154,7 @@ function frame(now){
         } else item=pick(['mc'],MC);
         openQuiz(item,{type:'station',station:near});
       }
+      else if (!W.loc && !W.prep && W.t>=W.nextQuiz && NEWQ()){ if (!amStart()) W.nextQuiz=W.t+8; }   // 돌발 퀴즈 대신 정답 몬스터
       else if (!W.loc && !W.prep && W.t>=W.nextQuiz){
         W.timedFlip^=1;
         if (W.timedFlip && MAPK==='zones' && LOC.length && !NEWQ()) startLoc();

@@ -716,3 +716,8 @@ body.editmode #title{visibility:hidden}
 .quitpop p{margin:0 0 14px;line-height:1.5;font-size:14px}
 .quit-act{display:flex;gap:10px;justify-content:center}
 .quit-act .btn{min-width:110px}
+
+/* 화면 글자·그림이 드래그되지 않게 (입력 칸과 문제 관리 화면은 그대로 선택돼요) */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable],#editor,#editor *{-webkit-user-select:text;user-select:text}
+img,canvas,svg{-webkit-user-drag:none;user-drag:none}
