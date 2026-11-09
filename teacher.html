@@ -55,6 +55,8 @@ h1{font-family:var(--display);font-weight:400;font-size:clamp(26px,5vw,34px);mar
 @media (max-width:700px){.tiles{grid-template-columns:1fr 1fr}}
 
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tablink{margin-left:auto;border:2px solid var(--ink);border-radius:999px;background:#ffd34d;color:var(--ink);padding:6px 14px;font-family:var(--display);font-size:16px;text-decoration:none}
+.tablink:hover{filter:brightness(1.05)}
 .tab{border:2px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);padding:6px 14px;font-family:var(--display);font-size:16px}
 .tab[aria-selected="true"]{background:var(--ink);color:#fff}
 .panel{padding:4px 0}
@@ -199,11 +201,12 @@ input.rename{border:2px solid var(--line);border-radius:6px;padding:2px 6px;widt
       <div class="pb-row">
         <label class="f"><span>어느 반을 열까요?</span><select id="pbCls"></select></label>
         <label class="f"><span>단원</span><select id="pbUnit"><option value="">불러오는 중…</option></select></label>
-        <label class="f"><span>맵</span><select id="pbMap"></select></label>
+        <label class="f"><span>추천 맵 (학생이 모드를 바꿀 수 있어요)</span><select id="pbMap"></select></label>
         <label class="f"><span>한 판 시간</span><select id="pbLim"><option value="2">2분</option><option value="3">3분</option><option value="4">4분</option><option value="5" selected>5분</option><option value="6">6분</option><option value="7">7분</option><option value="0">제한 없음</option></select></label>
         <label class="f"><span>한 사람당</span><select id="pbPlays"><option value="1" selected>1판</option><option value="2">2판</option><option value="3">3판</option><option value="999">제한 없음</option></select></label>
         <div class="pb-dur"><span>열어 둘 시간</span><div><button class="btn" data-pmin="10">10분</button><button class="btn" data-pmin="15">15분</button><button class="btn primary" data-pmin="20">20분</button><button class="btn" data-pmin="30">30분</button><button class="btn" data-pmin="50">50분</button></div></div>
       </div>
+      <p class="msg ok" id="pbNoLim" hidden>🔓 지금은 <b>판 수 · 시간 제한 없애기</b>가 켜져 있어요. 게임을 열지 않아도 학생은 언제든 할 수 있어요. (관리 탭에서 끌 수 있어요)</p>
       <ul class="list" id="pbList"></ul>
       <p class="msg" id="pbMsg" role="status"></p>
     </section>
@@ -225,6 +228,7 @@ input.rename{border:2px solid var(--line);border-radius:6px;padding:2px 6px;widt
       <button class="tab" role="tab" data-tab="classes" aria-selected="false">학급 관리</button>
       <button class="tab" role="tab" data-tab="roster" aria-selected="false">학생 명단</button>
       <button class="tab" role="tab" data-tab="manage" aria-selected="false">관리</button>
+      <a class="tablink" href="index.html?edit=1" target="_blank" rel="noopener" title="게임의 문제 관리 화면이 새 탭으로 바로 열려요">📝 문제 추가·수정</a>
     </div>
 
     <section class="card panel" id="pTw" hidden>
@@ -346,8 +350,14 @@ input.rename{border:2px solid var(--line);border-radius:6px;padding:2px 6px;widt
           <p class="msg" id="adminMsg" role="status"></p>
         </div>
         <div class="card box">
+          <h3>판 수 · 시간 제한 없애기</h3>
+          <p>켜면 '게임 열기'를 하지 않아도 학생이 <b>언제든, 몇 판이든</b> 할 수 있고 한 판 시간 제한도 없어요. 단원은 '게임 열기'로 연 반은 그 단원, 아니면 기본 단원으로 해요. 순위는 하루 단위로 모여요. 끄면 예전처럼 선생님이 열어야 시작돼요.</p>
+          <div class="row"><span class="pill lose" id="nolimState">불러오는 중</span><button class="btn" id="nolimToggle" disabled>제한 없애기 켜기</button></div>
+          <p class="msg" id="nolimMsg" role="status"></p>
+        </div>
+        <div class="card box">
           <h3>자유 플레이</h3>
-          <p>평소에는 '게임 열기'에서 정한 단원과 맵으로만 플레이해요. 자유 플레이를 켜면 학생이 단원과 맵을 직접 골라요. 시험 전 복습 기간에 켜 두는 걸 추천해요. 게임을 열어야 시작할 수 있는 건 그대로예요.</p>
+          <p>평소에는 '게임 열기'에서 정한 단원으로 플레이하고, 모드(맵)는 학생이 전투·평화 중에서 골라요. 자유 플레이를 켜면 단원까지 학생이 직접 골라요. 시험 전 복습 기간에 켜 두는 걸 추천해요. 게임을 열어야 시작할 수 있는 건 그대로예요.</p>
           <div class="row"><span class="pill lose" id="freeState">불러오는 중</span><button class="btn" id="freeToggle" disabled>자유 플레이 켜기</button></div>
           <p class="msg" id="freeMsg" role="status"></p>
         </div>
@@ -432,7 +442,7 @@ auth.onAuthStateChanged(async u=>{
   $('#meEmail').textContent=u.email;
   if (!(await isAdmin(u))){ gate(`${u.email} 계정은 선생님 권한이 없어요. 권한이 있는 선생님께 '함께 볼 선생님'에 추가해 달라고 요청하세요.`,'err'); return; }
   $('#gate').hidden=true; $('#app').hidden=false;
-  loadRegistry(); subscribe(); loadAdmins(); loadHero(); loadFree(); loadPartyLock(); watchPlay(); watchUnits();
+  loadRegistry(); subscribe(); loadAdmins(); loadHero(); loadFree(); loadNoLimit(); loadPartyLock(); watchPlay(); watchUnits();
 });
 
 /* 데이터 */
@@ -534,10 +544,12 @@ function renderStudents(){
   $('#tblStudents').innerHTML = rows.length ? th(cols,sortS,'s')+'<tbody>'+rows.map(s=>`<tr><td>${esc(s.cls)}</td><td>${esc(s.nick)}</td><td class="num">${s.plays}</td><td class="num">${s.best}</td><td class="num">${s.wins}</td><td class="num">${rateBar(s.rate)}</td><td>${fmtT(s.last)}</td><td class="qcell">${s.weak.length?s.weak.map(esc).join('<br>'):'<span style="color:var(--good)">없음</span>'}</td></tr>`).join('')+'</tbody>'
     : '<tr><td class="empty">이 조건에 맞는 기록이 없어요. 학생이 게임을 끝내면 여기에 바로 나타나요.</td></tr>';
 }
+const GM_NAMES={zones:'🏢 세 거점',general:'🌾 들판 마을',glacier:'🧊 녹는 빙하',defense:'🏰 성벽 디펜스',island:'🏝️ 서비스업 섬','island-p':'📦 택배 배달',runner:'🏃 정답 러너','defense-p':'🗼 성 지휘관',party:'🎉 파티',stage:'🟩 발판',teamwar:'🚩 점령전'};
+function modeCell(r){ const id=r.gm||(r.map?(r.map+(r.cs&&r.cs.pc?'-p':'')):''); if (!id) return '-'; return `${esc(GM_NAMES[id]||id)}${r.mp!=null?` <small style="color:var(--muted)">${(r.mp|0).toLocaleString('ko-KR')}</small>`:''}`; }
 function renderRecords(){
   const rows=VIEW.map(r=>({...r,rate:pct(r)})).sort(sorter(sortR));
-  const cols=[['ts','시각'],['kl','학급'],['nick','이름'],['unit','단원'],['win','결과'],['score','점수',1],['rate','정답률',1],['kills','처치',1],['timeSec','시간',1],['wrong','못 맞힌 문제']];
-  $('#tblRecords').innerHTML = rows.length ? th(cols,sortR,'r')+'<tbody>'+rows.map(r=>`<tr><td>${fmtT(r.ts)}</td><td>${esc(r.kl)}</td><td>${esc(r.nick)}</td><td>${esc(r.unit||'')}</td><td><span class="pill ${r.win?'win':'lose'}">${r.win?'승리':'게임 오버'}</span>${r.mode==='hero'?' <span class="pill hero">영웅</span>':r.mode==='hard'?' <span class="pill hero">어려움</span>':r.mode==='easy'?' <span class="pill">쉬움</span>':''}</td><td class="num">${r.score|0}</td><td class="num">${r.correct|0}/${r.asked|0} · ${r.rate}%</td><td class="num">${r.kills|0}</td><td class="num">${fmtDur(r.timeSec|0)}</td><td class="qcell">${r.wrongList.length?r.wrongList.map(esc).join('<br>'):'-'}</td></tr>`).join('')+'</tbody>'
+  const cols=[['ts','시각'],['kl','학급'],['nick','이름'],['unit','단원'],['win','결과'],['score','공식 점수',1],['gm','모드 · 기록'],['rate','정답률',1],['kills','처치',1],['timeSec','시간',1],['wrong','못 맞힌 문제']];
+  $('#tblRecords').innerHTML = rows.length ? th(cols,sortR,'r')+'<tbody>'+rows.map(r=>`<tr><td>${fmtT(r.ts)}</td><td>${esc(r.kl)}</td><td>${esc(r.nick)}</td><td>${esc(r.unit||'')}</td><td><span class="pill ${r.win?'win':'lose'}">${r.win?'승리':'게임 오버'}</span>${r.mode==='hero'?' <span class="pill hero">영웅</span>':r.mode==='hard'?' <span class="pill hero">어려움</span>':r.mode==='easy'?' <span class="pill">쉬움</span>':''}</td><td class="num">${r.score|0}</td><td>${modeCell(r)}</td><td class="num">${r.correct|0}/${r.asked|0} · ${r.rate}%</td><td class="num">${r.kills|0}</td><td class="num">${fmtDur(r.timeSec|0)}</td><td class="qcell">${r.wrongList.length?r.wrongList.map(esc).join('<br>'):'-'}</td></tr>`).join('')+'</tbody>'
     : '<tr><td class="empty">이 조건에 맞는 기록이 없어요.</td></tr>';
 }
 function renderMissed(){
@@ -982,6 +994,21 @@ $('#adminList').addEventListener('click',async e=>{
   try{ await db.ref('admins/'+b.dataset.delAdmin).remove(); }catch(err){ $('#adminMsg').className='msg err'; $('#adminMsg').textContent='빼지 못했어요.'; }
 });
 
+/* 판 수 · 시간 제한 없애기 */
+let nolimOn=false;
+function loadNoLimit(){
+  db.ref('settings/noLimit').on('value',snap=>{ nolimOn=snap.val()===true;
+    $('#nolimState').textContent=nolimOn?'켜짐 · 제한 없음':'꺼짐'; $('#nolimState').className='pill '+(nolimOn?'win':'lose');
+    $('#nolimToggle').textContent=nolimOn?'제한 다시 켜기':'제한 없애기 켜기'; $('#nolimToggle').disabled=false;
+    const pb=$('#pbNoLim'); if (pb) pb.hidden=!nolimOn; },
+    ()=>{ $('#nolimState').textContent='확인 불가'; $('#nolimMsg').className='msg err'; $('#nolimMsg').textContent='설정을 불러오지 못했어요. 새 보안 규칙을 올렸는지 확인해 주세요.'; });
+}
+$('#nolimToggle').addEventListener('click',async()=>{
+  $('#nolimToggle').disabled=true; const next=!nolimOn;
+  try{ await db.ref('settings/noLimit').set(next); $('#nolimMsg').className='msg ok'; $('#nolimMsg').textContent=next?'제한을 없앴어요. 학생은 언제든, 몇 판이든 할 수 있어요.':'제한을 다시 켰어요. 선생님이 게임을 열어야 시작할 수 있어요.'; }
+  catch(e){ $('#nolimMsg').className='msg err'; $('#nolimMsg').textContent='바꾸지 못했어요. 새 보안 규칙(database.rules.json)을 올렸는지 확인해 주세요.'; }
+  finally{ $('#nolimToggle').disabled=false; }
+});
 /* 자유 플레이 */
 let freeOn=false;
 function loadFree(){

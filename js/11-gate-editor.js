@@ -14,7 +14,9 @@ function playsUsed(g){
   try{ return +localStorage.getItem('gsd-pl-'+g.sid)||0; }catch(e){ return 0; }
 }
 function playsLeft(g){ if (!g) return 0; if (!g.sid||!g.plays||g.plays>=999) return Infinity; return Math.max(0,g.plays-playsUsed(g)); }
-function gateOpen(){ if (isAdmin || !fbDb || GATE_OK===false) return true; const g=activeGate(); return !!g && playsLeft(g)>0; }
+/* 선생님이 '판 수·시간 제한 없애기'를 켜면: 게임을 열지 않아도 언제든, 몇 판이든, 한 판 시간 제한 없이 해요 */
+let NO_LIMIT=false;
+function gateOpen(){ if (isAdmin || !fbDb || GATE_OK===false || NO_LIMIT) return true; const g=activeGate(); return !!g && playsLeft(g)>0; }
 function watchPlog(){
   if (plogRef){ plogRef.off(); plogRef=null; } PLOG={};
   if (!(AUTHMODE==='student'&&STUDENT&&fbDb)) return;
@@ -27,6 +29,7 @@ function updateGateUI(){
   if (starting){ b.disabled=true; b.textContent='확인 중…'; return; }
   if (isAdmin){ b.disabled=false; b.textContent='게임 시작'; note.hidden=false; note.className='gatenote teacher'; note.textContent='선생님 계정이라 언제든, 몇 판이든 시작할 수 있어요.'; return; }
   if (!fbDb || GATE_OK===false){ b.disabled=false; b.textContent='게임 시작'; note.hidden=true; return; }
+  if (NO_LIMIT){ b.disabled=false; b.textContent='게임 시작'; note.hidden=false; note.className='gatenote open'; note.textContent='🔓 언제든 할 수 있어요 · 판 수와 시간 제한이 없어요'; return; }
   if (GATE_OK===null){ b.disabled=true; b.textContent='확인 중…'; note.hidden=true; return; }
   const g=activeGate(); note.hidden=false;
   if (!g){ b.disabled=true; b.textContent='🔒 선생님이 열면 시작할 수 있어요'; note.className='gatenote shut';
@@ -45,7 +48,7 @@ function watchGate(){
 /* 판 하나를 쓰고 시작 */
 async function tryStart(){
   if (!assetsReady || starting) return;
-  if (isAdmin || !fbDb || GATE_OK===false){ startGame(); return; }
+  if (isAdmin || !fbDb || GATE_OK===false || NO_LIMIT){ startGame(); return; }
   const g=activeGate();
   if (!g || playsLeft(g)<=0){ if (!$('#end').hidden) $('#homeBtn').click(); updateGateUI(); return; }
   if (!g.sid || playsLeft(g)===Infinity){ startGame(); return; }

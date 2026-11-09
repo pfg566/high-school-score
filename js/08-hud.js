@@ -9,7 +9,7 @@ function updateHUD(){
   $('#waveTxt').textContent=`${Math.max(1,W.wave+1)}/${WAVES.length}`;
   $('#killTxt').textContent=W.kills;
   $('#corTxt').textContent=`${W.correct}/${W.asked}`;
-  $('#nextCard').hidden=!!W.loc||!!W.prep;
+  $('#nextCard').hidden=!!W.loc||!!W.prep||!!(FUN.am&&!FUN.am.done);
   const bgOn=NEWQ()&&W.bg&&W.bg.st; $('#bgCard').hidden=!bgOn; if (bgOn) $('#bgTxt').textContent=Math.max(0,Math.ceil(W.bg.until-W.t));
   if (W.up && W.up.list.length) { /* 강화 목록은 칩으로 */ }
   $('#nextTxt').textContent=Math.max(0,Math.ceil(W.nextQuiz-W.t));
@@ -54,7 +54,7 @@ function reset(){
   $('#locCard').hidden=true; $('#gateCard').hidden=true;
   TURRETS.forEach(t=>{ t.until=0; t.cd=0; }); bolts.forEach(b=>scene.remove(b.mesh)); bolts=[]; doorFlash=0;
   $('#doorRow').hidden=MAPK!=='defense';
-  $('#parcelRow').hidden=true; islReset(); glacierReset(); runnerReset(); stageReset(); twReset();
+  $('#parcelRow').hidden=true; islReset(); glacierReset(); runnerReset(); stageReset(); twReset(); funReset();
 }
 let NICK='', BAN='', CI=null;
 try{ NICK=localStorage.getItem('gsd-nick')||''; }catch(e){}
@@ -147,7 +147,7 @@ function startGame(){
   reset(); canvas.focus({preventScroll:true});
   try{ applyMood(!PARTY.on&&MAPK==='glacier'?'arctic':pickMood(PARTY.on?PARTY.rid:'')); }catch(e){}
   // 한 판 시간 제한: 선생님이 '게임 열기'에서 정한 분(퀴즈 푸는 시간 포함, 실제 시계 기준)
-  { const g=!PARTY.on&&MAPK!=='stage'&&MAPK!=='teamwar'&&typeof activeGate==='function'?activeGate():null, lim=g&&g.lim>0?g.lim:0;
+  { const g=!PARTY.on&&MAPK!=='stage'&&MAPK!=='teamwar'&&typeof activeGate==='function'&&!(typeof NO_LIMIT!=='undefined'&&NO_LIMIT)?activeGate():null, lim=g&&g.lim>0?g.lim:0;
     W.lim=lim; W.limEnd=lim?performance.now()+lim*60000:0; W.limWarn=0; W.timeUp=false; $('#timeCard').hidden=!lim; $('#timeCard').classList.remove('hurry'); }
 }
 /* 남은 시간 (매 프레임, 퀴즈 중에도 흘러요) */
@@ -183,8 +183,9 @@ function renderLevels(){
   const box=$('#modePick'); if (!box) return;
   if (LEVEL==='hero' && !HERO_OPEN) LEVEL='normal';
   $('#modeHeroL').hidden=!HERO_OPEN; box.classList.toggle('three',!HERO_OPEN);
-  box.querySelectorAll('input[name=mode]').forEach(i=>{ i.checked=i.value===LEVEL; i.nextElementSibling.querySelector('small').textContent=LEVELS[i.value].desc; });
+  box.querySelectorAll('input[name=mode]').forEach(i=>{ i.checked=i.value===LEVEL; i.nextElementSibling.querySelector('small').textContent=LEVELS[i.value].desc; }); try{ showModeDesc(); }catch(e){}
 }
 function readLevel(){ const i=document.querySelector('#modePick input[name=mode]:checked'); if (i && LEVELS[i.value]) LEVEL=i.value; }
-$('#modePick').addEventListener('change',()=>{ readLevel(); try{ localStorage.setItem('gsd-level',LEVEL); }catch(e){} });
+function showModeDesc(){ const i=document.querySelector('#modePick input[name=mode]:checked'), d=$('#modeDesc'); if (d&&i) d.textContent=i.nextElementSibling.querySelector('small').textContent; }
+$('#modePick').addEventListener('change',()=>{ readLevel(); showModeDesc(); try{ localStorage.setItem('gsd-level',LEVEL); }catch(e){} });
 renderLevels();
