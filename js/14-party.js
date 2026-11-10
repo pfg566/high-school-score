@@ -160,8 +160,8 @@ function partyUsed(g){
   if (AUTHMODE==='student'&&STUDENT) return +PPLOG[g.sid]||0;
   try{ return +localStorage.getItem('gsd-ppl-'+g.sid)||0; }catch(e){ return 0; }
 }
-function partyLeft(g){ if (NO_LIMIT) return Infinity; if (!g) return 0; if (!g.sid||!g.plays||g.plays>=999) return Infinity; return Math.max(0,g.plays-partyUsed(g)); }
-function partyGateOpen(){ if (isAdmin || !fbDb || GATE_OK===false || NO_LIMIT) return true; const g=activeGate(); return !!g && partyLeft(g)>0; }
+function partyLeft(g){ if (!g) return 0; if (!g.sid||!g.plays||g.plays>=999) return Infinity; return Math.max(0,g.plays-partyUsed(g)); }
+function partyGateOpen(){ if (isAdmin || !fbDb || GATE_OK===false) return true; const g=activeGate(); return !!g && partyLeft(g)>0; }
 function gateWhy(){ const g=activeGate(); if (!g) return '🔒 선생님이 게임을 열어야 방을 만들 수 있어요.'; if (partyLeft(g)<=0) return '이번 시간에 할 수 있는 파티 판을 다 했어요. (혼자 하는 판은 따로 남아 있을 수 있어요)'; return '지금은 방을 만들 수 없어요.'; }
 async function createRoom(){
   if (!partyGateOpen()){ ppNote(gateWhy(),'err'); return; }

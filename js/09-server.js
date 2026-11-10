@@ -113,7 +113,7 @@ $('#teacherLogin').addEventListener('click',async e=>{
 });
 function loadSettings(){
   if (!fbDb) return;
-  fbDb.ref('settings').on('value',snap=>{ const v=snap.val()||{}; HERO_OPEN=v.heroMode===true; FREE_PLAY=v.freePlay===true; NO_LIMIT=v.noLimit===true; try{ updateGateUI(); }catch(e){} PARTY_LOCK={quiz:v.partyQuizOff!==false,fight:v.partyFightOff!==false}; /* 선생님이 열기 전에는 잠겨 있어요 */ if (W.state!=='play'){ applyPlay(); renderLevels(); } try{ applyPartyLock(); }catch(e){} },()=>{ HERO_OPEN=false; });
+  fbDb.ref('settings').on('value',snap=>{ const v=snap.val()||{}; HERO_OPEN=v.heroMode===true; FREE_PLAY=v.freePlay===true; PARTY_LOCK={quiz:v.partyQuizOff!==false,fight:v.partyFightOff!==false}; /* 선생님이 열기 전에는 잠겨 있어요 */ if (W.state!=='play'){ applyPlay(); renderLevels(); } try{ applyPartyLock(); }catch(e){} },()=>{ HERO_OPEN=false; });
 }
 let BANK_LOADED=false;
 /* 문제 관리 탭(index.html?edit=1): 게임 첫 화면(학생 로그인)은 처음부터 가리고 '불러오는 중'만 보여 줘요 */

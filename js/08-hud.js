@@ -147,7 +147,7 @@ function startGame(){
   reset(); canvas.focus({preventScroll:true});
   try{ applyMood(!PARTY.on&&MAPK==='glacier'?'arctic':pickMood(PARTY.on?PARTY.rid:'')); }catch(e){}
   // 한 판 시간 제한: 선생님이 '게임 열기'에서 정한 분(퀴즈 푸는 시간 포함, 실제 시계 기준)
-  { const g=!PARTY.on&&MAPK!=='stage'&&MAPK!=='teamwar'&&typeof activeGate==='function'&&!(typeof NO_LIMIT!=='undefined'&&NO_LIMIT)?activeGate():null, lim=g&&g.lim>0?g.lim:0;
+  { const g=!PARTY.on&&MAPK!=='stage'&&MAPK!=='teamwar'&&typeof activeGate==='function'?activeGate():null, lim=g&&g.lim>0?g.lim:0;
     W.lim=lim; W.limEnd=lim?performance.now()+lim*60000:0; W.limWarn=0; W.timeUp=false; $('#timeCard').hidden=!lim; $('#timeCard').classList.remove('hurry'); }
 }
 /* 남은 시간 (매 프레임, 퀴즈 중에도 흘러요) */

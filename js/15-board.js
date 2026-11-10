@@ -1,8 +1,6 @@
 /* 사회 게임 RPG · 이번 시간 순위 (선생님이 '게임 열기'로 연 한 번의 시간 · 같은 반끼리)
    판이 끝날 때마다 내 기록을 board/{반}/{열기}/{번호}에 모아요. 점수는 가장 좋은 판, 나머지는 더해요. */
-function boardSid(){ try{ const g=activeGate(); if (g&&g.sid) return g.sid;
-  if (NO_LIMIT){ const d=new Date(Date.now()+(SOFF||0)); return 'd'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }   // 제한 없음: 하루 단위 순위
-  return ''; }catch(e){ return ''; } }
+function boardSid(){ try{ const g=activeGate(); return g&&g.sid?g.sid:''; }catch(e){ return ''; } }
 function boardRef(){ const sid=boardSid(); return (AUTHMODE==='student'&&STUDENT&&fbDb&&sid)?fbDb.ref(`board/${STUDENT.cid}/${sid}`):null; }
 async function boardWrite(r){
   const ref=boardRef(); if (!ref||!PROFILE) return;
