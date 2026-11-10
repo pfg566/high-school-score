@@ -5,7 +5,7 @@ let GATE={}, GATE_OK=null, SOFF=0, PLOG={}, plogRef=null, starting=false;
 function gateKey(){ if (AUTHMODE==='student'&&STUDENT) return STUDENT.cid; const c=$('#pkCls').value; return c&&!c.startsWith('n:')?c:''; }
 function activeGate(){
   const now=Date.now()+SOFF, k=gateKey();
-  for (const key of [k,'all']){ if (!key) continue; const g=GATE[key]; if (g && +g.until>now) return {key,sid:g.sid||'',plays:+g.plays||0,lim:+g.lim||0,until:+g.until,left:+g.until-now}; }
+  for (const key of [k,'all']){ if (!key) continue; const g=GATE[key]; if (g && +g.until>now) return {key,sid:g.sid||'',plays:+g.plays||0,lim:+g.lim||0,until:+g.until,left:+g.until-now,stop:g.stop===true}; }
   return null;
 }
 function playsUsed(g){
@@ -13,7 +13,8 @@ function playsUsed(g){
   if (AUTHMODE==='student'&&STUDENT) return +PLOG[g.sid]||0;
   try{ return +localStorage.getItem('gsd-pl-'+g.sid)||0; }catch(e){ return 0; }
 }
-function playsLeft(g){ if (!g) return 0; if (!g.sid||!g.plays||g.plays>=999) return Infinity; return Math.max(0,g.plays-playsUsed(g)); }
+function playsLeft(g){ if (!g) return 0; if (g.stop) return 0;   // 선생님이 '남은 판 없애기'를 누름
+  if (!g.sid||!g.plays||g.plays>=999) return Infinity; return Math.max(0,g.plays-playsUsed(g)); }
 function gateOpen(){ if (isAdmin || !fbDb || GATE_OK===false) return true; const g=activeGate(); return !!g && playsLeft(g)>0; }
 function watchPlog(){
   if (plogRef){ plogRef.off(); plogRef=null; } PLOG={};
@@ -32,6 +33,7 @@ function updateGateUI(){
   if (!g){ b.disabled=true; b.textContent='🔒 선생님이 열면 시작할 수 있어요'; note.className='gatenote shut';
     note.textContent=AUTHMODE==='guest'&&!gateKey()?'학급을 고르면 열렸는지 확인할 수 있어요.':'지금은 수업 시간이에요. 선생님이 게임을 열면 이 버튼이 켜져요. 상점 구경은 언제든 할 수 있어요.'; return; }
   const m=Math.ceil(g.left/60000), left=playsLeft(g);
+  if (g.stop){ b.disabled=true; b.textContent='🔒 이번 시간 게임은 끝났어요'; note.className='gatenote shut'; note.textContent='선생님이 남은 판을 마무리했어요. 하던 판은 끝까지 할 수 있어요. 상점 구경은 언제든 할 수 있어요.'; return; }
   if (left<=0){ b.disabled=true; b.textContent='이번 시간에 할 판을 다 했어요'; note.className='gatenote shut';
     note.textContent=`🎉 오늘 정해진 ${g.plays}판을 모두 했어요. 더 하고 싶으면 선생님께 '한 판 더'를 부탁하세요. (게임 시간 ${m}분 남음)`; return; }
   b.disabled=false; b.textContent=left===Infinity?'게임 시작':`게임 시작 · 남은 판 ${left}`; note.className='gatenote open';

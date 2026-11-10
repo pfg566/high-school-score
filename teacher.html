@@ -755,8 +755,8 @@ function renderPlay(){
   const now=pNow(), open=Object.keys(PG).filter(k=>(+PG[k].until||0)>now).sort((a,b)=>PG[a].until-PG[b].until);
   const key=open.map(k=>k+Math.ceil((PG[k].until-now)/1000)).join('|')+JSON.stringify(PLA).length; if (key===pbKey) return; pbKey=key;
   $('#pbList').innerHTML=open.length?open.map(k=>{ const g=PG[k], s=Math.ceil((g.until-now)/1000), m=Math.floor(s/60), pl=+g.plays||0;
-    const plTxt=(!pl||pl>=999?'판 수 제한 없음':`한 사람당 ${pl}판`)+` · ${+g.lim?`한 판 ${+g.lim}분`:'한 판 시간 제한 없음'}`;
-    return `<li class="open"><span><b>${esc(playLabel(k))}</b> · 열림 <b class="t">${m}:${String(s%60).padStart(2,'0')}</b> 남음 · ${plTxt} · 🗺️ ${gateWhat(g)}</span><span><button class="link plain" data-pset="${k}">위에서 고른 단원·맵으로 바꾸기</button> ${pl&&pl<999?`<button class="link plain" data-pall="${k}">모두에게 한 판 더</button> `:''}${pl&&pl<999?`<button class="link plain" data-pfree="${k}">판 수 제한 풀기</button> `:''}${+g.lim?`<button class="link plain" data-plimoff="${k}">한 판 시간 제한 풀기</button> `:''}<button class="link plain" data-padd="${k}">+10분</button> <button class="link" data-pclose="${k}">지금 닫기</button></span>${doneList(k)}</li>`; }).join('')
+    const plTxt=(g.stop?'⛔ 남은 판 없앰 (새 판 시작 못 함)':!pl||pl>=999?'판 수 제한 없음':`한 사람당 ${pl}판`)+` · ${+g.lim?`한 판 ${+g.lim}분`:'한 판 시간 제한 없음'}`;
+    return `<li class="open"><span><b>${esc(playLabel(k))}</b> · 열림 <b class="t">${m}:${String(s%60).padStart(2,'0')}</b> 남음 · ${plTxt} · 🗺️ ${gateWhat(g)}</span><span><button class="link plain" data-pset="${k}">위에서 고른 단원·맵으로 바꾸기</button> ${pl&&pl<999?`<button class="link plain" data-pall="${k}">모두에게 한 판 더</button> `:''}${g.stop?`<button class="link plain" data-presume="${k}">다시 하게 하기</button> `:`<button class="link plain" data-pstop="${k}">남은 판 없애기</button> `}${pl&&pl<999?`<button class="link plain" data-pfree="${k}">판 수 제한 풀기</button> `:''}${+g.lim?`<button class="link plain" data-plimoff="${k}">한 판 시간 제한 풀기</button> `:''}<button class="link plain" data-padd="${k}">+10분</button> <button class="link" data-pclose="${k}">지금 닫기</button></span>${doneList(k)}</li>`; }).join('')
     :'<li class="empty-li">지금은 모든 반이 닫혀 있어요. 학생은 게임을 시작할 수 없어요.</li>';
 }
 const okMsg=m=>{ $('#pbMsg').className='msg ok'; $('#pbMsg').textContent=m; pbKey=''; renderPlay(); };
@@ -772,13 +772,15 @@ try{ const v=localStorage.getItem('gsd-pblim'); if (v!==null && [...$('#pbLim').
 $('#pbList').addEventListener('click',async e=>{
   const ps=e.target.closest('[data-pset]');
   if (ps){ const k=ps.dataset.pset, unit=$('#pbUnit').value, map=$('#pbMap').value; if (!unit||!map) return; try{ await db.ref('playgate/'+k).update({unit,map}); okMsg(`${playLabel(k)}의 단원·맵을 바꿨어요. (${gateWhat({unit,map})}) 이미 시작한 판은 그대로예요.`); }catch(err){ errMsg(); } return; }
-  const a=e.target.closest('[data-padd]'), c=e.target.closest('[data-pclose]'), al=e.target.closest('[data-pall]'), one=e.target.closest('[data-pone]'), fr=e.target.closest('[data-pfree]'), lo=e.target.closest('[data-plimoff]');
+  const a=e.target.closest('[data-padd]'), c=e.target.closest('[data-pclose]'), al=e.target.closest('[data-pall]'), one=e.target.closest('[data-pone]'), fr=e.target.closest('[data-pfree]'), lo=e.target.closest('[data-plimoff]'), st=e.target.closest('[data-pstop]'), rs=e.target.closest('[data-presume]');
   try{
     if (a){ const k=a.dataset.padd; await db.ref('playgate/'+k).update({until:Math.round(Math.max(pNow(),+PG[k].until||0)+600000)}); okMsg(`${playLabel(k)} 게임 시간을 10분 늘렸어요.`); }
     if (c){ const k=c.dataset.pclose; await db.ref('playgate/'+k).update({until:Math.round(pNow())}); okMsg(`${playLabel(k)} 게임을 닫았어요. 하던 판은 마칠 수 있어요.`); }
-    if (fr){ const k=fr.dataset.pfree; await db.ref('playgate/'+k).update({plays:999}); okMsg(`${playLabel(k)} 판 수 제한을 풀었어요. 이미 다 한 학생도 바로 다시 할 수 있어요. (게임이 열려 있는 동안)`); }
+    if (st){ const k=st.dataset.pstop; await db.ref('playgate/'+k).update({stop:true}); okMsg(`${playLabel(k)} 남은 판을 모두 없앴어요. 이제 새 판은 시작할 수 없고, 하던 판은 끝까지 할 수 있어요.`); }
+    if (rs){ const k=rs.dataset.presume; await db.ref('playgate/'+k).update({stop:false}); okMsg(`${playLabel(k)} 다시 남은 판만큼 할 수 있게 했어요.`); }
+    if (fr){ const k=fr.dataset.pfree; await db.ref('playgate/'+k).update({plays:999,stop:false}); okMsg(`${playLabel(k)} 판 수 제한을 풀었어요. 이미 다 한 학생도 바로 다시 할 수 있어요. (게임이 열려 있는 동안)`); }
     if (lo){ const k=lo.dataset.plimoff; await db.ref('playgate/'+k).update({lim:0}); okMsg(`${playLabel(k)} 한 판 시간 제한을 풀었어요. 다음 판부터 시간 제한 없이 해요.`); }
-    if (al){ const k=al.dataset.pall; const p=(+PG[k].plays||1)+1; await db.ref('playgate/'+k).update({plays:p}); okMsg(`${playLabel(k)} 모든 학생이 한 판씩 더 할 수 있어요. (한 사람당 ${p}판)`); }
+    if (al){ const k=al.dataset.pall; const p=(+PG[k].plays||1)+1; await db.ref('playgate/'+k).update({plays:p,stop:false}); okMsg(`${playLabel(k)} 모든 학생이 한 판씩 더 할 수 있어요. (한 사람당 ${p}판)`); }
     if (one){ const [cid,n]=one.dataset.pone.split('|'), g=PG[cid]&&+PG[cid].until>pNow()?PG[cid]:PG.all, used=usedOf(cid,n,g.sid);
       await db.ref(`playlog/${cid}/${n}/${g.sid}`).set(Math.max(0,used-1)); okMsg(`${cLabel(cid)} ${n}번 학생에게 한 판 더 줬어요.`); }
   }catch(err){ errMsg(); }
