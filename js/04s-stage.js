@@ -127,8 +127,9 @@ function stgSetupQ(i){
 }
 /* 내가 서 있는 칸 → 보기 번호 */
 function stgSlotAt(x,z){ const q=STG.qs[STG.qi]; if (!q) return -1;
-  if (q.k==='mc'){ if (Math.abs(x)<.7||Math.abs(z)<.7) return -1; return (x>0?1:0)+(z>0?2:0); }
-  if (Math.abs(x)<.7) return -1; return x>0?1:0; }
+  // 발판 사이 틈(가운데 십자 줄)만 '안 고름'으로 쳐요 (예전엔 0.7m까지라, 정답 발판 가장자리에 서 있어도 떨어지는 것처럼 보였어요)
+  if (q.k==='mc'){ if (Math.abs(x)<.2||Math.abs(z)<.2) return -1; return (x>0?1:0)+(z>0?2:0); }
+  if (Math.abs(x)<.2) return -1; return x>0?1:0; }
 function stgOptOfSlot(slot){ const q=STG.qs[STG.qi]; if (slot<0) return -1; return q.k==='mc'?STG.perm[slot]:(slot===0?STG.oxLeft:1-STG.oxLeft); }
 function stgSlotOfOpt(opt){ const q=STG.qs[STG.qi]; if (opt<0) return -1; return q.k==='mc'?STG.perm.indexOf(opt):(opt===STG.oxLeft?0:1); }
 function stgCorrectOpt(){ const q=STG.qs[STG.qi]; return q.k==='mc'?0:(q.a?0:1); }
@@ -215,12 +216,13 @@ async function stgLoadGhosts(i){
   const rate=all?Math.round(right/all*100):0;
   const m=$('#stMsg'); if (!m.hidden && all) m.insertAdjacentHTML('beforeend',`<p class="st-rate">반 전체 정답률 ${rate}% (${right}/${all}명)</p>`);
 }
-function stgSlabsUp(instant){ STG.dropK=0; [...STG.slabs,...STG.oxSlabs].forEach(s=>{ s.g.position.y=0; }); }
+function stgSlabsUp(instant){ STG.dropK=0; [...STG.slabs,...STG.oxSlabs].forEach(s=>{ s.g.position.y=0; }); if (STG.start){ STG.start.position.y=.05; STG.start.visible=true; } }
 function stgRvTick(dt){
   STG.dropK=Math.min(1,STG.dropK+dt*.8);
   const C=stgCorrectOpt(), q=STG.qs[STG.qi], cs=stgSlotOfOpt(C), y=-STG.dropK*STG.dropK*30;
   if (q.k==='mc') STG.slabs.forEach((s,slot)=>{ if (slot!==cs) s.g.position.y=y; });
   else STG.oxSlabs.forEach((s,slot)=>{ if (slot!==cs) s.g.position.y=y; });
+  if (STG.start){ STG.start.position.y=.05+y; STG.start.visible=y>-25; }   // 가운데 출발 원판도 오답 발판과 함께 떨어져요
 }
 async function stgShowRank(){
   if (STG.rank) return; STG.rank=true;
