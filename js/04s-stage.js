@@ -26,14 +26,14 @@ function buildStage(){
   STG.slabs=STG_SLOT.map(([sx,sz],i)=>{ const g=new THREE.Group(); g.position.set(sx*3.85,0,sz*3.85);
     const b=cs(new THREE.Mesh(new THREE.BoxGeometry(7.4,1.4,7.4),std(new THREE.Color(STG_COL[i]).getHex(),{flatShading:true}))); b.position.y=-.7; g.add(b);
     const under=cs(new THREE.Mesh(new THREE.ConeGeometry(4.6,5,6),rockM)); under.rotation.x=Math.PI; under.position.y=-3.9; g.add(under);
-    const top=new THREE.Mesh(new THREE.PlaneGeometry(6.9,6.9),new THREE.MeshBasicMaterial({transparent:true,toneMapped:false})); top.rotation.x=-Math.PI/2; top.position.y=.02; top.visible=false; g.add(top);
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(6.9,6.9),new THREE.MeshBasicMaterial({transparent:true,color:0xcfcfcf})); top.rotation.x=-Math.PI/2; top.position.y=.02; top.visible=false; g.add(top);
     scene.add(g); return {g,top,slot:i}; });
   STG.oxSlabs=[-1,1].map((sx,i)=>{ const g=new THREE.Group(); g.position.set(sx*3.95,0,0);
     const b=cs(new THREE.Mesh(new THREE.BoxGeometry(7.6,1.4,15.6),std(0xffffff,{flatShading:true}))); b.position.y=-.7; g.add(b);
     const under=cs(new THREE.Mesh(new THREE.ConeGeometry(5.5,6,6),rockM)); under.rotation.x=Math.PI; under.position.y=-4.3; g.add(under);
-    const top=new THREE.Mesh(new THREE.PlaneGeometry(7.1,15.1),new THREE.MeshBasicMaterial({transparent:true,toneMapped:false})); top.rotation.x=-Math.PI/2; top.position.y=.02; top.visible=false; g.add(top);
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(7.1,15.1),new THREE.MeshBasicMaterial({transparent:true,color:0xcfcfcf})); top.rotation.x=-Math.PI/2; top.position.y=.02; top.visible=false; g.add(top);
     g.visible=false; scene.add(g); return {g,top,box:b,slot:i}; });
-  const start=new THREE.Mesh(new THREE.CircleGeometry(1.1,32),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.9})); start.rotation.x=-Math.PI/2; start.position.y=.05; scene.add(start);
+  const start=new THREE.Mesh(new THREE.CircleGeometry(1.1,32),new THREE.MeshBasicMaterial({color:0xdddddd,transparent:true,opacity:.75})); start.rotation.x=-Math.PI/2; start.position.y=.05; scene.add(start);
   STG.start=start;
 }
 MAP_BUILD.stage=()=>buildStage();
@@ -235,6 +235,7 @@ async function stgShowRank(){
 function stgEndUI(){ stgUnlisten(); stgRemoveAvatars(); document.body.classList.remove('stagemode'); ['#stHud','#stQ','#stMsg','#stRank'].forEach(s=>{ const e=$(s); if (e) e.hidden=true; }); STG.ring.visible=false; }
 function stgFinish(){ $('#stRank').hidden=true; if (W.state==='play') endGame(STG.lives>0); }
 function stageFrame(dt,real,now){
+  if (knight && (knight.anim.dead||endPose)){ knight.anim.revive(); endPose=false; }   // 지난 판에서 쓰러진(누운) 자세가 남지 않게
   if (!W.paused) W.t+=dt;
   lobbyTick(real,dt);
   const C=stgClock();
