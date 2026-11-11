@@ -177,7 +177,7 @@ function normalize(d){
   if (looksLikeBank(d)) return {version:2,active:'u1',units:[{id:'u1',name:DEFAULT_UNIT_NAME,map:'zones',bank:d}],settings:{submitUrl:''}};
   if (d && d.units && typeof d.units==='object'){
     const arr=x=>Array.isArray(x)?x.filter(Boolean):(x&&typeof x==='object'?Object.values(x):[]);
-    const units=arr(d.units).filter(u=>u&&typeof u.id==='string').map(u=>{ const b=u.bank||{}; return {id:u.id,name:String(u.name||'이름 없는 단원'),map:MAPS[u.map]?u.map:(u.id==='u1'?'zones':'general'),...(u.zcfg&&typeof u.zcfg==='object'?{zcfg:zcfgOf(u)}:{}),
+    const units=arr(d.units).filter(u=>u&&typeof u.id==='string').map(u=>{ const b=u.bank||{}; return {id:u.id,name:String(u.name||'이름 없는 단원'),map:MAPS[u.map]?u.map:(u.id==='u1'?'zones':'general'),sch:String(u.sch||'').slice(0,30),grade:[1,2,3].includes(+u.grade)?+u.grade:0,...(u.zcfg&&typeof u.zcfg==='object'?{zcfg:zcfgOf(u)}:{}),
       bank:{mc:arr(b.mc).map(x=>({...x,o:arr(x.o)})),ox:arr(b.ox),cls:arr(b.cls),loc:arr(b.loc)}}; });
     if (units.length){ const active=units.some(u=>u.id===d.active&&isReady(u))?d.active:(units.find(isReady)||units[0]).id; const su=d.settings&&typeof d.settings.submitUrl==='string'&&/^https:\/\//.test(d.settings.submitUrl)?d.settings.submitUrl:''; return {version:2,active,units,settings:{submitUrl:su}}; }
   }
@@ -237,11 +237,14 @@ let LAST_PLAYC=null;
 function refreshModeBadges(){ try{ if (LAST_PLAYC && W.state!=='play') renderPlayModes(LAST_PLAYC); }catch(e){} }
 let MODE_PICK=''; try{ MODE_PICK=localStorage.getItem('gsd-mode')||''; }catch(e){}
 const modeById=id=>PLAY_MODES.find(x=>x.id===id);
+/* 단원의 학교·학년 (비어 있으면 모든 학교·학년) */
+function unitTagText(u){ if (!u) return ''; const s=u.sch?((SCHOOLS[u.sch]||{}).name||'지워진 학교'):'', g=u.grade?u.grade+'학년':''; return s&&g?`${s} · ${g}`:s?`${s} · 모든 학년`:g?`모든 학교 · ${g}`:''; }
+function unitFitsMe(u){ if (!u) return false; const c=STUDENT&&CLASSES[STUDENT.cid]; if (!c) return true; return (!u.sch||u.sch===c.sid)&&(!u.grade||u.grade===+c.grade); }
 function playChoice(){
   const byId=id=>DATA.units.find(u=>u.id===id), ready=DATA.units.filter(isReady);
   const def=()=>{ const u=byId(DATA.active)&&isReady(byId(DATA.active))?byId(DATA.active):ready[0]||DATA.units[0]; return u; };
   let c;
-  if (isAdmin || FREE_PLAY){ let u=byId(PICK.unit); if (!u||!isReady(u)) u=def(); c={u,rec:mapOf(u),free:true,src:FREE_PLAY?'free':'admin'}; }
+  if (isAdmin || FREE_PLAY){ let u=byId(PICK.unit); if (!u||!isReady(u)||(!isAdmin&&!unitFitsMe(u)&&ready.some(unitFitsMe))) u=(!isAdmin&&ready.find(x=>unitFitsMe(x)&&x.id===DATA.active))||(!isAdmin&&ready.find(unitFitsMe))||def(); c={u,rec:mapOf(u),free:true,src:FREE_PLAY?'free':'admin'}; }
   else { const g=activeGate(), raw=g&&GATE[g.key];
     if (raw && raw.unit && byId(raw.unit) && isReady(byId(raw.unit))){ const u=byId(raw.unit); c={u,rec:mapOK(u,raw.map)?raw.map:mapOf(u),free:false,src:'gate'}; }
     else { const u=def(); c={u,rec:mapOf(u),free:false,src:'default'}; } }
@@ -281,9 +284,9 @@ function refreshStyle(){
 $('#stylePick').addEventListener('click',e=>{ const b=e.target.closest('[data-style]'); if (!b) return; PEACE=b.dataset.style==='peace'; try{ localStorage.setItem('gsd-peace',PEACE?'1':'0'); }catch(_){} refreshStyle(); });
 function renderUnitPicker(c){
   c=c||playChoice(); if (!c||!c.u) return;
-  const ready=DATA.units.filter(isReady);
+  let ready=DATA.units.filter(isReady); if (!isAdmin){ const mine=ready.filter(unitFitsMe); if (mine.length) ready=mine; }   // 자유 플레이: 내 학교·학년 단원만
   $('#unitPick').hidden=!c.free||ready.length<2; $('#mapPick').hidden=true;
-  $('#unitSelect').innerHTML=ready.map(u=>`<option value="${esc(u.id)}"${u.id===c.u.id?' selected':''}>${esc(u.name)}${u.id===DATA.active?' (수업 단원)':''}</option>`).join('');
+  $('#unitSelect').innerHTML=ready.map(u=>`<option value="${esc(u.id)}"${u.id===c.u.id?' selected':''}>${esc(u.name)}${isAdmin&&unitTagText(u)?' · '+unitTagText(u):''}${u.id===DATA.active?' (수업 단원)':''}</option>`).join('');
   $('#mapSelect').innerHTML=MAP_ORDER.filter(k=>mapOK(c.u,k)).map(k=>`<option value="${k}"${k===c.m?' selected':''}>${MAPS[k].name}</option>`).join('');
   $('#ppLock').hidden=!c.free;
   $('#ppLock').textContent=c.src==='admin'?'⚙️ 선생님 계정이라 단원도 바꿀 수 있어요 · 아래에서 모드를 골라요':c.src==='free'?'🗺️ 자유 플레이: 단원과 모드를 골라 보세요':'🎮 단원은 선생님이 정해요 · 아래에서 하고 싶은 모드를 골라요';
@@ -331,8 +334,14 @@ function fieldHTML(t,item,i){
   return area('문장',item.q)+sel('a','정답',item.a,[[0,zcfgOf(curU()).c[0]],[1,zcfgOf(curU()).c[1]]])+'<div></div>'+inp('e','해설',item.e,'wide');
 }
 function renderUnitBar(){
-  $('#edUnit').innerHTML=ED.units.map(u=>`<option value="${esc(u.id)}"${u.id===edUnit?' selected':''}>${esc(u.name)}${u.id===ED.active?' · 수업 단원':''}</option>`).join('');
+  // 단원 목록: 학교·학년별로 묶어서 보여요
+  const groups={}; ED.units.forEach(u=>{ const k=unitTagText(u)||'모든 학교 · 모든 학년'; (groups[k]=groups[k]||[]).push(u); });
+  const keys=Object.keys(groups).sort((a,b)=>a==='모든 학교 · 모든 학년'?-1:b==='모든 학교 · 모든 학년'?1:a.localeCompare(b,'ko'));
+  $('#edUnit').innerHTML=keys.map(k=>`<optgroup label="${esc(k)}">`+groups[k].map(u=>`<option value="${esc(u.id)}"${u.id===edUnit?' selected':''}>${esc(u.name)}${u.id===ED.active?' · 수업 단원':''}</option>`).join('')+'</optgroup>').join('');
   const u=curU(), ready=isReady(u);
+  const sids=Object.keys(SCHOOLS||{}).sort((a,b)=>((SCHOOLS[a].order||0)-(SCHOOLS[b].order||0))||String(SCHOOLS[a].name).localeCompare(String(SCHOOLS[b].name),'ko'));
+  $('#edSch').innerHTML='<option value="">모든 학교</option>'+sids.map(id=>`<option value="${esc(id)}">${esc(SCHOOLS[id].name)}</option>`).join('')+(u.sch&&!SCHOOLS[u.sch]?`<option value="${esc(u.sch)}">(지워진 학교)</option>`:'');
+  $('#edSch').value=u.sch||''; $('#edGrade').value=String(u.grade||0);
   const missing=MAPS[mapOf(u)].need.filter(k=>!u.bank[k].length).map(k=>TYPES[k].label);
   $('#edMap').value=mapOf(u);
   $('#edZcfg').hidden=mapOf(u)!=='zones';
@@ -389,6 +398,8 @@ $('#edAdd').addEventListener('click',()=>{ B()[edTab].push(blankItem[edTab]()); 
 $('#edZcfg').addEventListener('click',e=>{ const b=e.target.closest('[data-zpre]'); if (!b) return; const p=ZCFG_PRESETS[b.dataset.zpre]; curU().zcfg=JSON.parse(JSON.stringify(p.cfg)); renderEditor(); setStatus('#edStatus',`거점 이름을 '${p.label}'(으)로 바꿨어요. '저장하기'를 눌러야 반영돼요.`,'ok'); });
 $('#edZcfg').addEventListener('change',e=>{ const el=e.target.closest('[data-zc]'); if (!el) return; const u=curU(), c=zcfgOf(u), f=el.dataset.zc, v=el.value.trim();
   if (f==='q') c.q=v||c.q; else if (v) c[f[0]][+f[1]]=v; u.zcfg=c; renderEditor(); });
+$('#edSch').addEventListener('change',e=>{ curU().sch=e.target.value; renderEditor(); setStatus('#edStatus',"학교를 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); });
+$('#edGrade').addEventListener('change',e=>{ curU().grade=+e.target.value||0; renderEditor(); setStatus('#edStatus',"학년을 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); });
 $('#edMap').addEventListener('change',e=>{ curU().map=e.target.value; renderEditor(); setStatus('#edStatus',"맵을 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); });
 $('#edUnit').addEventListener('change',e=>{ edUnit=e.target.value; edTab='mc'; disarm(); $('#edRenameBox').hidden=true; renderEditor(); });
 $('#edUnitAdd').addEventListener('click',()=>{
@@ -462,7 +473,7 @@ $('#edReset').addEventListener('click',()=>{
 function cleanData(){
   const tr=s=>String(s).trim();
   const su=($('#edSubmitUrl').value||'').trim();
-  return {version:2,active:ED.active,settings:{submitUrl:/^https:\/\//.test(su)?su:''},units:ED.units.map(u=>({id:u.id,name:u.name.trim()||'이름 없는 단원',map:mapOf(u),...(u.zcfg?{zcfg:zcfgOf(u)}:{}),bank:{
+  return {version:2,active:ED.active,settings:{submitUrl:/^https:\/\//.test(su)?su:''},units:ED.units.map(u=>({id:u.id,name:u.name.trim()||'이름 없는 단원',map:mapOf(u),...(u.sch?{sch:u.sch}:{}),...(u.grade?{grade:u.grade}:{}),...(u.zcfg?{zcfg:zcfgOf(u)}:{}),bank:{
     mc:u.bank.mc.map(x=>({z:x.z,q:tr(x.q),o:x.o.map(tr),e:tr(x.e)})),
     loc:u.bank.loc.map(x=>({q:tr(x.q),a:x.a,e:tr(x.e)})),
     ox:u.bank.ox.map(x=>({q:tr(x.q),a:!!x.a,e:tr(x.e)})),

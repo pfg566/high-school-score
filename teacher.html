@@ -1135,9 +1135,10 @@ function stInit(){
     return `<optgroup label="${esc(SCH[sid].name)}">`+ks.map(k=>`<option value="${k}">${CLS[k].grade}학년 ${CLS[k].cls}반</option>`).join('')+'</optgroup>'; }).join('');
   if (cur && [...el.options].some(o=>o.value===cur)) el.value=cur;
   const us=$('#stUnit'), uc=us.value||UACTIVE;
-  us.innerHTML=UNITS.filter(u=>u.cnt.mc+u.cnt.ox>0).map(u=>`<option value="${esc(u.id)}">${esc(u.name)} (4지선다 ${u.cnt.mc} · O/X ${u.cnt.ox})</option>`).join('');
+  us.innerHTML=unitOptions(UNITS.filter(u=>u.cnt.mc+u.cnt.ox>0),el.value,u=>` (4지선다 ${u.cnt.mc} · O/X ${u.cnt.ox})`);
   if (uc && [...us.options].some(o=>o.value===uc)) us.value=uc;
   if (!ST.inited){ ST.inited=true; el.addEventListener('change',stWatch);
+    el.addEventListener('change',()=>{ const v=us.value; us.innerHTML=unitOptions(UNITS.filter(u=>u.cnt.mc+u.cnt.ox>0),el.value,u=>` (4지선다 ${u.cnt.mc} · O/X ${u.cnt.ox})`); const fit=UNITS.find(u=>u.cnt.mc+u.cnt.ox>0&&unitFits(u,el.value)&&(u.sch||u.grade)); us.value=fit?fit.id:v; });
     $('#stOpen').addEventListener('click',stOpenRoom); $('#stGo').addEventListener('click',stStart); $('#stStop').addEventListener('click',stStop);
     ST.timer=setInterval(stRender,1000); }
   stWatch();
@@ -1199,20 +1200,33 @@ let UNITS=[], UACTIVE='';
 const arrOf=x=>Array.isArray(x)?x.filter(Boolean):(x&&typeof x==='object'?Object.values(x):[]);
 function watchUnits(){
   db.ref('bank').on('value',snap=>{ const v=snap.val(); BANKRAW=v; try{ buildQLook(v); }catch(e){}
-    if (v && v.units){ UNITS=arrOf(v.units).filter(u=>u&&u.id).map(u=>{ const b=u.bank||{}; return {id:u.id,name:String(u.name||'이름 없는 단원'),map:MAPINFO[u.map]?u.map:'zones',cnt:{mc:arrOf(b.mc).length,ox:arrOf(b.ox).length,cls:arrOf(b.cls).length,loc:arrOf(b.loc).length}}; }); UACTIVE=v.active||''; }
+    if (v && v.units){ UNITS=arrOf(v.units).filter(u=>u&&u.id).map(u=>{ const b=u.bank||{}; return {id:u.id,name:String(u.name||'이름 없는 단원'),map:MAPINFO[u.map]?u.map:'zones',sch:String(u.sch||''),grade:+u.grade||0,cnt:{mc:arrOf(b.mc).length,ox:arrOf(b.ox).length,cls:arrOf(b.cls).length,loc:arrOf(b.loc).length}}; }); UACTIVE=v.active||''; }
     else if (v && v.mc){ UNITS=[{id:'u1',name:'기본 단원',map:'zones',cnt:{mc:arrOf(v.mc).length,ox:arrOf(v.ox).length,cls:arrOf(v.cls).length,loc:arrOf(v.loc).length}}]; UACTIVE='u1'; }
     else { UNITS=[]; }
     fillUnitSelect(); pbKey=''; renderPlay(); },()=>{});
 }
 const mapOkT=(u,k)=>!!(u&&MAPINFO[k]&&MAPINFO[k].need.every(t=>u.cnt[t]>0));
 const unitById=id=>UNITS.find(u=>u.id===id);
-function fillUnitSelect(){
-  const el=$('#pbUnit'), cur=el.value||UACTIVE;
-  const ok=UNITS.filter(u=>mapOkT(u,u.map)||Object.keys(MAPINFO).some(k=>mapOkT(u,k)));
-  el.innerHTML=ok.length?ok.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}${u.id===UACTIVE?' (수업 단원)':''}</option>`).join(''):'<option value="">문제가 있는 단원이 없어요</option>';
-  if ([...el.options].some(o=>o.value===cur)) el.value=cur;
-  fillMapSelect(true);
+/* 단원의 학교·학년: 고른 반에 맞는 단원을 위에, 다른 학교·학년 단원은 아래 묶음으로 */
+function unitTag(u){ const s=u.sch?((SCH[u.sch]||{}).name||'지워진 학교'):'', g=u.grade?u.grade+'학년':''; return s&&g?`${s} ${g}`:s||g||''; }
+function unitFits(u,cid){ const c=CLS[cid]; if (!c) return true; return (!u.sch||u.sch===c.sid)&&(!u.grade||u.grade===+c.grade); }
+function unitOptions(list,cid,lab){
+  const opt=u=>`<option value="${esc(u.id)}">${esc(u.name)}${unitTag(u)?' · '+esc(unitTag(u)):''}${lab?lab(u):''}${u.id===UACTIVE?' (수업 단원)':''}</option>`;
+  const c=CLS[cid]; if (!c) return list.map(opt).join('');
+  const mine=list.filter(u=>unitFits(u,cid)&&(u.sch||u.grade)), common=list.filter(u=>!u.sch&&!u.grade), other=list.filter(u=>!unitFits(u,cid));
+  const nm=`${(SCH[c.sid]||{}).name||''} ${c.grade}학년`;
+  return (mine.length?`<optgroup label="⭐ ${esc(nm)} 단원">${mine.map(opt).join('')}</optgroup>`:'')+(common.length?`<optgroup label="모든 학교·학년 공통">${common.map(opt).join('')}</optgroup>`:'')+(other.length?`<optgroup label="다른 학교·학년">${other.map(opt).join('')}</optgroup>`:'');
 }
+function fillUnitSelect(){
+  const el=$('#pbUnit'), cur=el.value||UACTIVE, cid=$('#pbCls').value;
+  const ok=UNITS.filter(u=>mapOkT(u,u.map)||Object.keys(MAPINFO).some(k=>mapOkT(u,k)));
+  el.innerHTML=ok.length?unitOptions(ok,cid):'<option value="">문제가 있는 단원이 없어요</option>';
+  const fit=ok.find(u=>unitFits(u,cid)&&(u.sch||u.grade));
+  if (UNIT_PICK_CLS!==cid && fit) el.value=fit.id;   // 반을 바꾸면 그 반 학교·학년 단원을 먼저 골라 둬요
+  else if ([...el.options].some(o=>o.value===cur)) el.value=cur;
+  UNIT_PICK_CLS=cid; fillMapSelect(true);
+}
+let UNIT_PICK_CLS=null;
 function fillMapSelect(reset){
   const u=unitById($('#pbUnit').value), el=$('#pbMap'), cur=reset?(u?u.map:''):el.value;
   const ks=Object.keys(MAPINFO).filter(k=>mapOkT(u,k));
@@ -1220,6 +1234,7 @@ function fillMapSelect(reset){
   if (ks.includes(cur)) el.value=cur;
 }
 $('#pbUnit').addEventListener('change',()=>fillMapSelect(true));
+$('#pbCls').addEventListener('change',()=>{ try{ fillUnitSelect(); }catch(e){} });
 const gateWhat=g=>{ const u=unitById(g.unit); return g.unit?`${u?esc(u.name):'삭제된 단원'} · ${MAPINFO[g.map]?MAPINFO[g.map].n:''}`:'수업 단원'; };
 
 /* 파티 모드 잠금 */

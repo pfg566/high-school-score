@@ -721,3 +721,6 @@ body.editmode #title{visibility:hidden}
 body{-webkit-user-select:none;user-select:none}
 input,textarea,select,[contenteditable],#editor,#editor *{-webkit-user-select:text;user-select:text}
 img,canvas,svg{-webkit-user-drag:none;user-drag:none}
+
+/* 문제 관리: 단원의 학교·학년 */
+.ed-target{display:grid;grid-template-columns:1fr 1fr;gap:8px}
