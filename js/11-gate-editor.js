@@ -338,7 +338,7 @@ function renderUnitBar(){
   const groups={}; ED.units.forEach(u=>{ const k=unitTagText(u)||'모든 학교 · 모든 학년'; (groups[k]=groups[k]||[]).push(u); });
   const keys=Object.keys(groups).sort((a,b)=>a==='모든 학교 · 모든 학년'?-1:b==='모든 학교 · 모든 학년'?1:a.localeCompare(b,'ko'));
   $('#edUnit').innerHTML=keys.map(k=>`<optgroup label="${esc(k)}">`+groups[k].map(u=>`<option value="${esc(u.id)}"${u.id===edUnit?' selected':''}>${esc(u.name)}${u.id===ED.active?' · 수업 단원':''}</option>`).join('')+'</optgroup>').join('');
-  const u=curU(), ready=isReady(u);
+  const u=curU(), ready=isReady(u); ensureEdTarget();
   const sids=Object.keys(SCHOOLS||{}).sort((a,b)=>((SCHOOLS[a].order||0)-(SCHOOLS[b].order||0))||String(SCHOOLS[a].name).localeCompare(String(SCHOOLS[b].name),'ko'));
   $('#edSch').innerHTML='<option value="">모든 학교</option>'+sids.map(id=>`<option value="${esc(id)}">${esc(SCHOOLS[id].name)}</option>`).join('')+(u.sch&&!SCHOOLS[u.sch]?`<option value="${esc(u.sch)}">(지워진 학교)</option>`:'');
   $('#edSch').value=u.sch||''; $('#edGrade').value=String(u.grade||0);
@@ -398,8 +398,14 @@ $('#edAdd').addEventListener('click',()=>{ B()[edTab].push(blankItem[edTab]()); 
 $('#edZcfg').addEventListener('click',e=>{ const b=e.target.closest('[data-zpre]'); if (!b) return; const p=ZCFG_PRESETS[b.dataset.zpre]; curU().zcfg=JSON.parse(JSON.stringify(p.cfg)); renderEditor(); setStatus('#edStatus',`거점 이름을 '${p.label}'(으)로 바꿨어요. '저장하기'를 눌러야 반영돼요.`,'ok'); });
 $('#edZcfg').addEventListener('change',e=>{ const el=e.target.closest('[data-zc]'); if (!el) return; const u=curU(), c=zcfgOf(u), f=el.dataset.zc, v=el.value.trim();
   if (f==='q') c.q=v||c.q; else if (v) c[f[0]][+f[1]]=v; u.zcfg=c; renderEditor(); });
-$('#edSch').addEventListener('change',e=>{ curU().sch=e.target.value; renderEditor(); setStatus('#edStatus',"학교를 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); });
-$('#edGrade').addEventListener('change',e=>{ curU().grade=+e.target.value||0; renderEditor(); setStatus('#edStatus',"학년을 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); });
+// 학교·학년 칸: 예전 index.html이 캐시에 남아 있어도 보이도록, 없으면 여기서 만들어 넣어요
+function ensureEdTarget(){ if (document.getElementById('edSch')) return; const m=$('#edMap'); if (!m) return; const lab=m.closest('label');
+  const d=document.createElement('div'); d.className='ed-target';
+  d.innerHTML='<label class="fld"><span>어느 학교 문제인가요?</span><select id="edSch"></select></label><label class="fld"><span>몇 학년 문제인가요?</span><select id="edGrade"><option value="0">모든 학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select></label>';
+  lab.parentNode.insertBefore(d,lab); }
+document.addEventListener('change',e=>{
+  if (e.target.id==='edSch'){ curU().sch=e.target.value; renderEditor(); setStatus('#edStatus',"학교를 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); }
+  if (e.target.id==='edGrade'){ curU().grade=+e.target.value||0; renderEditor(); setStatus('#edStatus',"학년을 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); } });
 $('#edMap').addEventListener('change',e=>{ curU().map=e.target.value; renderEditor(); setStatus('#edStatus',"맵을 바꿨어요. '저장하기'를 눌러야 반영돼요.",'ok'); });
 $('#edUnit').addEventListener('change',e=>{ edUnit=e.target.value; edTab='mc'; disarm(); $('#edRenameBox').hidden=true; renderEditor(); });
 $('#edUnitAdd').addEventListener('click',()=>{
