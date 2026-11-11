@@ -227,7 +227,7 @@ input.rename{border:2px solid var(--line);border-radius:6px;padding:2px 6px;widt
       <button class="tab" role="tab" data-tab="classes" aria-selected="false">학급 관리</button>
       <button class="tab" role="tab" data-tab="roster" aria-selected="false">학생 명단</button>
       <button class="tab" role="tab" data-tab="manage" aria-selected="false">관리</button>
-      <a class="tablink" href="index.html?edit=1" target="_blank" rel="noopener" title="게임의 문제 관리 화면이 새 탭으로 바로 열려요">📝 문제 추가·수정</a>
+      <a class="tablink" id="editLink" href="index.html?edit=1" target="_blank" rel="noopener" title="게임의 문제 관리 화면이 새 탭으로 바로 열려요">📝 문제 추가·수정</a>
     </div>
 
     <section class="card panel" id="pTw" hidden>
@@ -991,6 +991,8 @@ $('#adminList').addEventListener('click',async e=>{
   try{ await db.ref('admins/'+b.dataset.delAdmin).remove(); }catch(err){ $('#adminMsg').className='msg err'; $('#adminMsg').textContent='빼지 못했어요.'; }
 });
 
+/* 문제 추가·수정 링크: 열 때마다 주소 끝에 시각을 붙여 브라우저에 남은 예전 화면 대신 항상 새 화면이 열리게 해요 */
+document.getElementById('editLink').addEventListener('click',e=>{ e.currentTarget.href='index.html?edit=1&r='+Date.now(); });
 /* 자유 플레이 */
 let freeOn=false;
 function loadFree(){

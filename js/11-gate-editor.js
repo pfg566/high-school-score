@@ -339,6 +339,7 @@ function renderUnitBar(){
   const keys=Object.keys(groups).sort((a,b)=>a==='모든 학교 · 모든 학년'?-1:b==='모든 학교 · 모든 학년'?1:a.localeCompare(b,'ko'));
   $('#edUnit').innerHTML=keys.map(k=>`<optgroup label="${esc(k)}">`+groups[k].map(u=>`<option value="${esc(u.id)}"${u.id===edUnit?' selected':''}>${esc(u.name)}${u.id===ED.active?' · 수업 단원':''}</option>`).join('')+'</optgroup>').join('');
   const u=curU(), ready=isReady(u); ensureEdTarget();
+  { let v=document.getElementById('edVer'); if (!v){ v=document.createElement('small'); v.id='edVer'; v.style.cssText='display:block;text-align:right;font-size:11px;color:#8a94a6;margin-top:4px'; const st=document.getElementById('edStatus'); st.parentNode.insertBefore(v,st); } v.textContent='화면 버전 '+ED_VER; }
   const sids=Object.keys(SCHOOLS||{}).sort((a,b)=>((SCHOOLS[a].order||0)-(SCHOOLS[b].order||0))||String(SCHOOLS[a].name).localeCompare(String(SCHOOLS[b].name),'ko'));
   $('#edSch').innerHTML='<option value="">모든 학교</option>'+sids.map(id=>`<option value="${esc(id)}">${esc(SCHOOLS[id].name)}</option>`).join('')+(u.sch&&!SCHOOLS[u.sch]?`<option value="${esc(u.sch)}">(지워진 학교)</option>`:'');
   $('#edSch').value=u.sch||''; $('#edGrade').value=String(u.grade||0);
@@ -399,6 +400,7 @@ $('#edZcfg').addEventListener('click',e=>{ const b=e.target.closest('[data-zpre]
 $('#edZcfg').addEventListener('change',e=>{ const el=e.target.closest('[data-zc]'); if (!el) return; const u=curU(), c=zcfgOf(u), f=el.dataset.zc, v=el.value.trim();
   if (f==='q') c.q=v||c.q; else if (v) c[f[0]][+f[1]]=v; u.zcfg=c; renderEditor(); });
 // 학교·학년 칸: 예전 index.html이 캐시에 남아 있어도 보이도록, 없으면 여기서 만들어 넣어요
+const ED_VER='20261112a';   // 문제 관리 화면에 보이는 버전 (업로드가 반영됐는지 확인용)
 function ensureEdTarget(){ if (document.getElementById('edSch')) return; const m=$('#edMap'); if (!m) return; const lab=m.closest('label');
   const d=document.createElement('div'); d.className='ed-target';
   d.innerHTML='<label class="fld"><span>어느 학교 문제인가요?</span><select id="edSch"></select></label><label class="fld"><span>몇 학년 문제인가요?</span><select id="edGrade"><option value="0">모든 학년</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select></label>';
