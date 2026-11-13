@@ -33,7 +33,7 @@ try{
 function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
   if (composer){ composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w,h); } }
 addEventListener('resize', resize); resize();
-function renderFrame(){ if (composer) composer.render(); else renderer.render(scene,camera); }
+function renderFrame(){ if (typeof petsTick==='function') petsTick(); if (typeof faceTick==='function') faceTick(); if (composer) composer.render(); else renderer.render(scene,camera); }
 
 /* 하늘 */
 let SKY=null;
